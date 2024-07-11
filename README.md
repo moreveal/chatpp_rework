@@ -10,8 +10,6 @@ This repository hosts a reworked version of the Chat++ plugin originally develop
 
 **TODO List:**
 - **Restore Chat Positioning:** Implement functionality to allow users to move the chat window and its elements.
-- **Arrow Display Improvement:** Ensure the arrow next to the chat line displays correctly on all resolutions and with various fonts.
-- **ESC Key Handling:** Ignore ESC key presses in the game window to enable closing the edit window not just with Enter.
 
 **Installation:**
 1. Download the latest release from the [releases page](https://github.com/moreveal/chatpp_rework/releases).
