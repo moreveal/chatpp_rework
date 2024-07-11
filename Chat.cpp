@@ -75,30 +75,18 @@ SampVersion Chat::getSampVersion()
 		if (base == 0) return SAMP_NOT_LOADED;
 
 		const auto* ntHeader = reinterpret_cast<IMAGE_NT_HEADERS*>(base + reinterpret_cast<IMAGE_DOS_HEADER*>(base)->e_lfanew);
-		switch (ntHeader->OptionalHeader.AddressOfEntryPoint)
+		static const auto entryPoint = ntHeader->OptionalHeader.AddressOfEntryPoint;
+		for (size_t i = 0; i < SAMPEntryPoints.size(); i++)
 		{
-			case 0x31DF13:
+			const auto& curEntryPoint = SAMPEntryPoints[i];
+			
+			if (curEntryPoint == entryPoint)
 			{
-				version = SAMP_037_R1;
-				break;
-			}
-			case 0xCC4D0:
-			{
-				version = SAMP_037_R3_1;
-				break;
-			}
-			case 0xCBC90:
-			{
-				version = SAMP_037_R5;
-				break;
-			}
-			default:
-			{
-				version = SAMP_UNKNOWN;
+				return static_cast<SampVersion>(i + 2);
 			}
 		}
 	}
-	return version;
+	return SAMP_UNKNOWN;
 }
 
 HWND Chat::getGameHWND()
@@ -141,7 +129,7 @@ float Chat::getSampFontSizeParam()
 
 char* Chat::getSampFontName()
 {
-	return reinterpret_cast<char* (*)()>(SAMPGetAddress(SAMP_ADDRESS_CHAT_FONTNAME))();
+	return reinterpret_cast<char* (*)()>(SAMPGetAddress(SAMP_ADDRESS_CHAT_GET_FONTFACE))();
 }
 
 std::string Chat::getFontRelativePathByName(const std::string& fontName)

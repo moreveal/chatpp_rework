@@ -210,7 +210,7 @@ void Menu::RebuildFonts()
 		fontPath += "\\";
 
 		std::string fontFileName{ Chat::getFontRelativePathByName(Chat::getSampFontName()) };
-		if (fontFileName.empty()) fontFileName = "ArialBd.ttf";
+		if (fontFileName.empty() || fontFileName.find("arial") != std::string::npos) fontFileName = "ArialBd.ttf";
 		fontPath += fontFileName;
 
 		auto& io = ImGui::GetIO();
@@ -263,4 +263,5 @@ void Menu::CloseEditLine()
 {
 	this->editLineActive = false;
 	Chat::setSampCursorMode(0);
+	Chat::getInstance().mSelectedLine = -1;
 }
