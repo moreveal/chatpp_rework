@@ -31,22 +31,22 @@ struct ChatEntryPosition {
 class ChatEntryManager
 {
 private:
-	CChat*								pChat = nullptr;
-	int									curLineRenderIndex = -1;
-	std::vector<ChatEntryPosition>		entries;
+	CChat*                              pChat = nullptr;
+	int                                 curLineRenderIndex = -1;
+	std::vector<ChatEntryPosition>      entries;
 
 public:
 	ChatEntryManager();
 
-	void								push(CRect rect);
-	ChatEntryPosition&					get(size_t lineIndex);
+	void                                push(CRect rect);
+	ChatEntryPosition&                  get(size_t lineIndex);
 
-	int									getCurrentLineRenderIndex() { return curLineRenderIndex; }
+	int                                 getCurrentLineRenderIndex() { return curLineRenderIndex; }
 
-	void								setChatPointer(CChat* pChat);
-	[[nodiscard]] int					getLastLineIndex() const;
-	[[nodiscard]] int					getLineIndexInScreenCoords(const size_t& xPos, const size_t& yPos) const;
-	[[nodiscard]] uint32_t				getCurrentScrollbarPos() const;
+	void                                setChatPointer(CChat* pChat);
+	[[nodiscard]] int                   getLastLineIndex() const;
+	[[nodiscard]] int                   getLineIndexInScreenCoords(const size_t& xPos, const size_t& yPos) const;
+	[[nodiscard]] uint32_t              getCurrentScrollbarPos() const;
 };
 
 #endif
