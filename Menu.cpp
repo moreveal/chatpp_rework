@@ -3,8 +3,6 @@
 #undef max
 #undef min
 
-#include <iostream>
-
 ImVec4 Menu::ARGBToImVec4(const uint32_t& color)
 {
 	const float

@@ -1,8 +1,5 @@
 ﻿#include "Chat.h"
 
-#include <iostream>
-#include <regex>
-
 #include "ChatEntryManager.h"
 #include "Menu.h"
 
@@ -322,6 +319,16 @@ int __fastcall Chat::CChat__RenderEntry(const decltype(mChatRenderEntryHook)& ho
 
 	if (hook.get_return_address() - SAMPGetAddress(SAMP_ADDRESS_CHAT_RENDER) != 0x13F) { // Not timestamp
 		auto& chatEntryManager = chat.getChatEntryManager();
+
+		// Render was started
+		if (chatEntryManager.getCurrentLineRenderIndex() == -1)
+		{
+			// TODO: Get upper left corner of the chat and save it somewhere
+		}
+
+		// TODO: If position was changed - apply this offsets to the render (same for scrollbar, etc.)
+
+		// Add line to render
 		chatEntryManager.push(rect);
 
 		// Render was finished

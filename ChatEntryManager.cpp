@@ -25,6 +25,8 @@ void ChatEntryManager::push(CRect rect)
 		while (curLineRenderIndex < 99 && pChat->m_entry[curLineRenderIndex].m_szText[0] == '\0') curLineRenderIndex++;
 	}
 
+	// TODO: Fix calculations according to possible chat movement
+
 	// Change string clickable area width
 	static const auto& io = ImGui::GetIO();
 	const auto x2 = static_cast<int>(static_cast<double>(io.DisplaySize.x) * (1024.0 / 1920));
