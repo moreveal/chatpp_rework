@@ -119,6 +119,7 @@ public:
 	static float						getSampFontSize(); // real fontsize
 	static float						getSampFontSizeParam(); // [ /fontsize ] param
 	static char*						getSampFontName();
+	static std::string					getFontRelativePathByName(const std::string& fontName);
 	static void							sampDeleteChatLine(const int& id);
 	static void							sampDeleteChatLineAll();
 	static void							chatUpdate();

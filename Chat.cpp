@@ -137,6 +137,31 @@ char* Chat::getSampFontName()
 	return reinterpret_cast<char* (*)()>(SAMPGetAddress(SAMP_ADDRESS_CHAT_FONTNAME))();
 }
 
+std::string Chat::getFontRelativePathByName(const std::string& fontName)
+{
+	HKEY hKey;
+	const char* subKey = "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts";
+	LONG result = RegOpenKeyExA(HKEY_LOCAL_MACHINE, subKey, 0, KEY_READ, &hKey);
+
+	if (result != ERROR_SUCCESS) return std::string{};
+
+	char value[512];
+	DWORD valueLength = sizeof(value);
+	const std::string fontRegistryName = fontName + " (TrueType)";
+
+	result = RegQueryValueExA(hKey, fontRegistryName.c_str(), nullptr, nullptr, (LPBYTE)value, &valueLength);
+
+	if (result != ERROR_SUCCESS) {
+		RegCloseKey(hKey);
+		return std::string{};
+	}
+
+	RegCloseKey(hKey);
+
+	std::string fontPath = value;
+	return fontPath;
+}
+
 void Chat::chatUpdate()
 {
 	const auto& pChat = getInstance().pChat;
@@ -219,8 +244,8 @@ HRESULT __stdcall Chat::OnWndProc(const decltype(mWndProcHook)& hook, HWND hwnd,
 	wchar_t wch;
 	MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, reinterpret_cast<char*>(&wParam), 1, &wch, 1);
 
-	// Don't send the ESCAPE key while the edit window is open
-	if (menu.IsEditLineActive() && msg == WM_KEYDOWN && wParam == VK_ESCAPE) return true;
+	// Don't send the ESCAPE key while the edit window is open [Input cancel bypass]
+	//if (menu.IsEditLineActive() && msg == WM_KEYDOWN && wParam == VK_ESCAPE) return true;
 
 	// ImGui key handle
 	ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam);

@@ -200,14 +200,16 @@ void Menu::RebuildFonts()
 {
 	std::string fontPath(256, '\0');
 
-	if (SHGetSpecialFolderPathA(GetActiveWindow(), fontPath.data(), CSIDL_FONTS, false))
+	if (SHGetSpecialFolderPathA(Chat::getGameHWND(), fontPath.data(), CSIDL_FONTS, false))
 	{
 		ImGui_ImplDX9_InvalidateDeviceObjects();
 
 		fontPath.resize(fontPath.find('\0'));
-		std::string fontName{ Chat::getSampFontName() };
-		if (fontName == "Arial") fontName += "Bd";
-		fontPath += "\\" + fontName + ".ttf";
+		fontPath += "\\";
+
+		std::string fontFileName{ Chat::getFontRelativePathByName(Chat::getSampFontName()) };
+		if (fontFileName.empty()) fontFileName = "ArialBd.ttf";
+		fontPath += fontFileName;
 
 		auto& io = ImGui::GetIO();
 		ImVector<ImWchar> ranges;
