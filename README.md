@@ -6,7 +6,7 @@ This repository hosts a reworked version of the Chat++ plugin originally develop
 **Improvements:**
 - **Enhanced Text Copying:** Ensures accurate copying of text regardless of the keyboard layout.
 - **Colorless Copying by Default:** Text is copied without color formatting by default. Hold Shift while clicking Copy to retain colors.
-- **SAMP 0.3.7-R3 Support:** Fully compatible with the latest version of SAMP.
+- **SAMP 0.3.7 (R1/R3/R5) Support:** Full support for the latest versions of SA:MP.
 
 **TODO List:**
 - **Restore Chat Positioning:** Implement functionality to allow users to move the chat window and its elements.
@@ -26,7 +26,7 @@ Contributions are welcome! If you encounter any bugs or have suggestions for imp
 This project is licensed under the [MIT License](LICENSE).
 
 **Credits:**
-- Original Chat++ Plugin by [BlackKnigga](https://www.blast.hk/threads/20939/)
+- Original Chat++ Plugin by [BlackKnigga](https://www.blast.hk/members/83040/)
 - Rewritten by [moreveal](https://www.blast.hk/members/412519/)
 
 **Links:**
