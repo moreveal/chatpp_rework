@@ -217,11 +217,16 @@ std::string Chat::convertFromUTF8(const std::string& utf8_str) {
 
 HRESULT __stdcall Chat::OnWndProc(const decltype(mWndProcHook)& hook, HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
+	auto& menu = Menu::getInstance();
+
 	wchar_t wch;
 	MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, reinterpret_cast<char*>(&wParam), 1, &wch, 1);
-	ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam);
 
-	auto& menu = Menu::getInstance();
+	// Don't send the ESCAPE key while the edit window is open
+	if (menu.IsEditLineActive() && msg == WM_KEYDOWN && wParam == VK_ESCAPE) return true;
+
+	// ImGui key handle
+	ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam);
 
 	// Check for mouse move
 	if (msg == WM_MOUSEMOVE || msg == WM_RBUTTONDOWN) {
@@ -252,9 +257,9 @@ HRESULT __stdcall Chat::OnWndProc(const decltype(mWndProcHook)& hook, HWND hwnd,
 	// Close editline window by esc/enter + block keys for game
 	if (menu.IsEditLineActive())
 	{
-		if ((msg == WM_CHAR || msg == WM_KEYUP) && wParam == VK_RETURN)
+		if ((msg == WM_CHAR || msg == WM_KEYUP || msg == WM_KEYDOWN) && (wParam == VK_RETURN || wParam == VK_ESCAPE))
 		{
-			if (msg == WM_CHAR) return true;
+			if (msg != WM_KEYUP) return true;
 			if (!menu.IsColorPopupActive()) menu.CloseEditLine();
 		}
 		return true;

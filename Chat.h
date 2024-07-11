@@ -1,9 +1,6 @@
 #ifndef CHAT_H
 #define CHAT_H
 
-// TODO: Spaces at the end of all files
-// TODO: Delete unused includes
-
 #include "pch.h"
 #include "GameStructures.h"
 #include "ChatEntryManager.h"
