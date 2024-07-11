@@ -1,5 +1,7 @@
 ﻿#include "Chat.h"
 
+#include <iostream>
+
 #include "ChatEntryManager.h"
 #include "Menu.h"
 
@@ -186,7 +188,7 @@ void Chat::sampDeleteChatLine(const int& id)
 void Chat::sampDeleteChatLineAll()
 {
 	const auto& pChat = getInstance().pChat;
-
+	
 	for (auto& entry : pChat->m_entry)
 		entry = CChatEntry();
 
@@ -243,9 +245,6 @@ HRESULT __stdcall Chat::OnWndProc(const decltype(mWndProcHook)& hook, HWND hwnd,
 
 	wchar_t wch;
 	MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, reinterpret_cast<char*>(&wParam), 1, &wch, 1);
-
-	// Don't send the ESCAPE key while the edit window is open [Input cancel bypass]
-	//if (menu.IsEditLineActive() && msg == WM_KEYDOWN && wParam == VK_ESCAPE) return true;
 
 	// ImGui key handle
 	ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam);

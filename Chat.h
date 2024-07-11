@@ -45,14 +45,14 @@ static uintptr_t SAMPAddresses[][SAMP_ADDRESS_AMOUNT]
 // Definitions
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-using dMainLoop = void(__stdcall*)();
-using dOnPresent = HRESULT(__stdcall*)(IDirect3DDevice9*, const RECT*, const RECT*, HWND, const RGNDATA*);
-using dOnReset = HRESULT(__stdcall*)(IDirect3DDevice9*, D3DPRESENT_PARAMETERS*);
-using dChatRender = void* (__fastcall*)(void*, void*);
-using dChatRenderEntry = int(__fastcall*)(void*, void*, const char*, CRect, uint32_t);
-using dChatAddEntry = void(__fastcall*)(void*, void*, int, const char*, const char*, DWORD, DWORD);
-using dRecalcFontSize = int(__fastcall*)(void*, void*);
-using dGameSetCursorMode = int(__thiscall*)(void*, int nMode, int hideImmediately);
+using dMainLoop =				void(__stdcall*)();
+using dOnPresent =				HRESULT(__stdcall*)(IDirect3DDevice9*, const RECT*, const RECT*, HWND, const RGNDATA*);
+using dOnReset =				HRESULT(__stdcall*)(IDirect3DDevice9*, D3DPRESENT_PARAMETERS*);
+using dChatRender =				void* (__fastcall*)(void*, void*);
+using dChatRenderEntry =		int(__fastcall*)(void*, void*, const char*, CRect, uint32_t);
+using dChatAddEntry =			void(__fastcall*)(void*, void*, int, const char*, const char*, DWORD, DWORD);
+using dRecalcFontSize =			int(__fastcall*)(void*, void*);
+using dGameSetCursorMode =		int(__thiscall*)(void*, int nMode, int hideImmediately);
 
 class Chat
 {

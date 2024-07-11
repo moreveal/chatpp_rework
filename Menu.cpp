@@ -35,7 +35,9 @@ void Menu::Render()
 	const int cursorMode = Chat::getSampCursorMode();
 	const bool cursorEnabled = cursorMode >= 2 && cursorMode <= 3;
 
-	if (Chat::isGTAMenuActive() || !cursorEnabled) return;
+	// Stop render
+	if (Chat::isGTAMenuActive()) return;
+	if (!cursorEnabled && !IsPopupActive()) return;
 
 	if (mSelectedLine > -1)
 	{
