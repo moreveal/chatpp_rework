@@ -130,6 +130,11 @@ float Chat::getSampFontSize()
 	return static_cast<float>(reinterpret_cast<int(*)()>(SAMPGetAddress(SAMP_ADDRESS_FONTSIZE_VALUE))());
 }
 
+float Chat::getSampFontSizeParam()
+{
+	return (getSampFontSize() - 20) / 2;
+}
+
 char* Chat::getSampFontName()
 {
 	return reinterpret_cast<char* (*)()>(SAMPGetAddress(SAMP_ADDRESS_CHAT_FONTNAME))();
@@ -160,45 +165,45 @@ void Chat::sampDeleteChatLineAll()
 {
 	const auto& pChat = getInstance().pChat;
 
-	for (int i = 0; i < 100; i++)
-		pChat->m_entry[i] = CChatEntry();
+	for (auto& entry : pChat->m_entry)
+		entry = CChatEntry();
 
 	getInstance().chatUpdate();
 }
 
 std::string Chat::convertToUTF8(const std::string& os_str) {
-	UINT os_codepage = GetACP();
+	const UINT os_codepage = GetACP();
 	
-	const int wchars_num = MultiByteToWideChar(os_codepage, 0, os_str.c_str(), -1, NULL, 0);
+	const int wchars_num = MultiByteToWideChar(os_codepage, 0, os_str.c_str(), -1, nullptr, 0);
 	if (wchars_num == 0) {
-		return std::string();
+		return std::string{};
 	}
 	std::wstring wstr(wchars_num, 0);
-	MultiByteToWideChar(os_codepage, 0, os_str.c_str(), -1, &wstr[0], wchars_num);
+	MultiByteToWideChar(os_codepage, 0, os_str.c_str(), -1, wstr.data(), wchars_num);
 	
-	const int utf8_chars_num = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, NULL, 0, NULL, NULL);
+	const int utf8_chars_num = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, nullptr, 0, nullptr, nullptr);
 	if (utf8_chars_num == 0) {
-		return std::string();
+		return std::string{};
 	}
 	std::string utf8_str(utf8_chars_num, 0);
-	WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, &utf8_str[0], utf8_chars_num, NULL, NULL);
+	WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, utf8_str.data(), utf8_chars_num, nullptr, nullptr);
 
 	return utf8_str;
 }
 
 std::string Chat::convertFromUTF8(const std::string& utf8_str) {
-	UINT os_codepage = GetACP();
+	const UINT os_codepage = GetACP();
 	
 	const int len = MultiByteToWideChar(CP_UTF8, 0, utf8_str.c_str(), -1, nullptr, 0);
-	wchar_t* utf16_buffer = new wchar_t[len];
+	auto* utf16_buffer = new wchar_t[len];
 	MultiByteToWideChar(CP_UTF8, 0, utf8_str.c_str(), -1, utf16_buffer, len);
 	
 	const int os_chars_num = WideCharToMultiByte(os_codepage, 0, utf16_buffer, -1, nullptr, 0, nullptr, nullptr);
 	if (os_chars_num == 0) {
 		delete[] utf16_buffer;
-		return std::string();
+		return std::string{};
 	}
-	char* os_buffer = new char[os_chars_num];
+	auto* os_buffer = new char[os_chars_num];
 	WideCharToMultiByte(os_codepage, 0, utf16_buffer, -1, os_buffer, os_chars_num, nullptr, nullptr);
 
 	delete[] utf16_buffer;
@@ -208,90 +213,6 @@ std::string Chat::convertFromUTF8(const std::string& utf8_str) {
 	delete[] os_buffer;
 
 	return result;
-}
-
-void* __fastcall Chat::CChat__Render(const decltype(mChatRenderHook)& hook, void* ptr, void*)
-{
-	auto& pChat = getInstance().pChat;
-	static bool getChatPtr = false;
-	if (!getChatPtr)
-	{
-		// Get chat pointer
-		pChat = static_cast<CChat*>(ptr);
-		getChatEntryManager().setChatPointer(pChat);
-		getChatPtr = true;
-	}
-
-	return hook.get_trampoline()(ptr, nullptr);
-}
-
-void __fastcall Chat::CChat__AddEntry(const decltype(mChatAddEntryHook)& hook, void* ptr, void*, int nType, const char* szText, const char* szPrefix, D3DCOLOR textColor, D3DCOLOR prefixColor)
-{
-	auto& mSelectedLine = getInstance().mSelectedLine;
-	if (mSelectedLine > -1) mSelectedLine--;
-
-	return hook.get_trampoline()(ptr, nullptr, nType, szText, szPrefix, textColor, prefixColor);
-}
-
-int __fastcall Chat::CChat__RecalcFontSize(const decltype(mChatRecalcFontSizeHook)& hook, void* ptr, void*)
-{
-	Menu::getInstance().RebuildFonts();
-	return hook.get_trampoline()(ptr, nullptr);
-}
-
-int __fastcall Chat::CChat__RenderEntry(const decltype(mChatRenderEntryHook)& hook, void* ptr, void*, const char* src, CRect rect, uint32_t color)
-{
-	auto& chat = getInstance();
-
-	if (hook.get_return_address() - SAMPGetAddress(SAMP_ADDRESS_CHAT_RENDER) != 0x13F) { // Not timestamp
-		auto& chatEntryManager = chat.getChatEntryManager();
-		chatEntryManager.push(rect);
-
-		// Render was finished
-		if (chatEntryManager.getCurrentLineRenderIndex() == -1)
-		{
-			const auto& menu = Menu::getInstance();
-
-			if (!menu.IsPopupActive() && !menu.IsEditLineActive())
-			{
-				// Update line index (for scroll, etc.)
-				POINT cursorPos;
-				if (GetCursorPos(&cursorPos))
-				{
-					const auto lineIndex = getChatEntryManager().getLineIndexInScreenCoords(cursorPos.x, cursorPos.y);
-					if (lineIndex > -1) {
-						chat.mSelectedLine = lineIndex;
-					}
-				}
-			}
-		}
-	}
-	
-	return hook.get_trampoline()(ptr, nullptr, src, rect, color);
-}
-
-std::optional<HRESULT> Chat::OnPresent(const decltype(mOnPresentHook)& hook, IDirect3DDevice9* pDevice, const RECT*, const RECT*, HWND, const RGNDATA*) {
-	auto& menu = Menu::getInstance();
-
-	if (!menu.imguiInited) {
-		ImGui::CreateContext();
-		ImGui_ImplWin32_Init(getGameHWND());
-		ImGui_ImplDX9_Init(pDevice);
-
-		menu.imguiInited = true;
-	}
-	
-	ImGui_ImplDX9_NewFrame();
-	ImGui_ImplWin32_NewFrame();
-	ImGui::NewFrame();
-
-	menu.Render();
-	
-	ImGui::EndFrame();
-	ImGui::Render();
-	ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
-
-	return std::nullopt;
 }
 
 HRESULT __stdcall Chat::OnWndProc(const decltype(mWndProcHook)& hook, HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -322,23 +243,48 @@ HRESULT __stdcall Chat::OnWndProc(const decltype(mWndProcHook)& hook, HWND hwnd,
 
 					if (msg == WM_RBUTTONDOWN) menu.ShowPopup();
 				}
-				else mSelectedLine = -1;		
+				else mSelectedLine = -1;
 			}
-		} else if (!isEdit) mSelectedLine = -1;
+		}
+		else if (!isEdit) mSelectedLine = -1;
 	}
 
 	// Close editline window by esc/enter + block keys for game
 	if (menu.IsEditLineActive())
 	{
-		if ( (msg == WM_CHAR || msg == WM_KEYUP) && wParam == VK_RETURN)
+		if ((msg == WM_CHAR || msg == WM_KEYUP) && wParam == VK_RETURN)
 		{
 			if (msg == WM_CHAR) return true;
 			if (!menu.IsColorPopupActive()) menu.CloseEditLine();
 		}
 		return true;
 	}
-	
+
 	return hook.get_trampoline()(hwnd, msg, wParam, lParam);
+}
+
+std::optional<HRESULT> Chat::OnPresent(const decltype(mOnPresentHook)& hook, IDirect3DDevice9* pDevice, const RECT*, const RECT*, HWND, const RGNDATA*) {
+	auto& menu = Menu::getInstance();
+
+	if (!menu.imguiInited) {
+		ImGui::CreateContext();
+		ImGui_ImplWin32_Init(getGameHWND());
+		ImGui_ImplDX9_Init(pDevice);
+
+		menu.imguiInited = true;
+	}
+
+	ImGui_ImplDX9_NewFrame();
+	ImGui_ImplWin32_NewFrame();
+	ImGui::NewFrame();
+
+	menu.Render();
+
+	ImGui::EndFrame();
+	ImGui::Render();
+	ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
+
+	return std::nullopt;
 }
 
 std::optional<HRESULT> Chat::OnLost(const decltype(mOnResetHook)& hook, IDirect3DDevice9* pDevice, D3DPRESENT_PARAMETERS* parameters) {
@@ -348,4 +294,64 @@ std::optional<HRESULT> Chat::OnLost(const decltype(mOnResetHook)& hook, IDirect3
 
 void Chat::OnReset(const decltype(mOnResetHook)& hook, HRESULT& return_value, IDirect3DDevice9* pDevice, D3DPRESENT_PARAMETERS* parameters) {
 	ImGui_ImplDX9_InvalidateDeviceObjects();
+}
+
+void* __fastcall Chat::CChat__Render(const decltype(mChatRenderHook)& hook, void* ptr, void*)
+{
+	auto& pChat = getInstance().pChat;
+	static bool getChatPtr = false;
+	if (!getChatPtr)
+	{
+		// Get chat pointer
+		pChat = static_cast<CChat*>(ptr);
+		getChatEntryManager().setChatPointer(pChat);
+		getChatPtr = true;
+	}
+
+	return hook.get_trampoline()(ptr, nullptr);
+}
+
+int __fastcall Chat::CChat__RenderEntry(const decltype(mChatRenderEntryHook)& hook, void* ptr, void*, const char* src, CRect rect, uint32_t color)
+{
+	auto& chat = getInstance();
+
+	if (hook.get_return_address() - SAMPGetAddress(SAMP_ADDRESS_CHAT_RENDER) != 0x13F) { // Not timestamp
+		auto& chatEntryManager = chat.getChatEntryManager();
+		chatEntryManager.push(rect);
+
+		// Render was finished
+		if (chatEntryManager.getCurrentLineRenderIndex() == -1)
+		{
+			const auto& menu = Menu::getInstance();
+
+			if (!menu.IsPopupActive() && !menu.IsEditLineActive())
+			{
+				// Update line index (for scroll, etc.)
+				POINT cursorPos;
+				if (GetCursorPos(&cursorPos))
+				{
+					const auto lineIndex = getChatEntryManager().getLineIndexInScreenCoords(cursorPos.x, cursorPos.y);
+					if (lineIndex > -1) {
+						chat.mSelectedLine = lineIndex;
+					}
+				}
+			}
+		}
+	}
+
+	return hook.get_trampoline()(ptr, nullptr, src, rect, color);
+}
+
+void __fastcall Chat::CChat__AddEntry(const decltype(mChatAddEntryHook)& hook, void* ptr, void*, int nType, const char* szText, const char* szPrefix, D3DCOLOR textColor, D3DCOLOR prefixColor)
+{
+	auto& mSelectedLine = getInstance().mSelectedLine;
+	if (mSelectedLine > -1) mSelectedLine--;
+
+	return hook.get_trampoline()(ptr, nullptr, nType, szText, szPrefix, textColor, prefixColor);
+}
+
+int __fastcall Chat::CChat__RecalcFontSize(const decltype(mChatRecalcFontSizeHook)& hook, void* ptr, void*)
+{
+	Menu::getInstance().RebuildFonts();
+	return hook.get_trampoline()(ptr, nullptr);
 }

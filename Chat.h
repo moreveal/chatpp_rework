@@ -119,7 +119,8 @@ public:
 	static ChatEntryManager&			getChatEntryManager();
 	static int							getSampCursorMode();
 	static void							setSampCursorMode(int nMode);
-	static float						getSampFontSize();
+	static float						getSampFontSize(); // real fontsize
+	static float						getSampFontSizeParam(); // [ /fontsize ] param
 	static char*						getSampFontName();
 	static void							sampDeleteChatLine(const int& id);
 	static void							sampDeleteChatLineAll();

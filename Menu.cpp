@@ -45,9 +45,13 @@ void Menu::Render()
 		{
 			const auto& position = Chat::getInstance().getChatEntryManager().get(mSelectedLine);
 			const auto& rect = position.rect;
-
-			// TODO: Offsets by SAMP char height
-			ImGui::SetWindowPos(ImVec2((float)rect.x1 - io.DisplaySize.x * (10.0f / 1920), (float)rect.y1 - io.DisplaySize.y * (5.0f / 1080)));
+			const auto& charHeight = static_cast<size_t>(Chat::getInstance().pChat->m_nCharHeight);
+			
+			const auto
+				xPos = static_cast<float>(rect.x1) - ImGui::CalcTextSize("> ").x,
+				yPos = static_cast<float>(rect.y1) + std::ceil(static_cast<float>(rect.y2 - rect.y1) / 2.0f) - Chat::getSampFontSize() + (Chat::getSampFontSizeParam() + static_cast<float>(charHeight) / 6);
+			
+			ImGui::SetWindowPos(ImVec2(xPos, yPos));
 			ImGui::SetCursorPosX(0.0f);
 			ImGui::Text(">");
 
@@ -55,7 +59,7 @@ void Menu::Render()
 		}
 	}
 
-	auto& chat = Chat::getInstance();
+	const auto& chat = Chat::getInstance();
 	if (ImGui::Begin("##PopupWrapper", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoTitleBar))
 	{
 		if (this->openPopup && !ImGui::IsPopupOpen("TextContextMenu"))
