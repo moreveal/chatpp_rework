@@ -87,6 +87,11 @@ SampVersion Chat::getSampVersion()
 				version = SAMP_037_R3_1;
 				break;
 			}
+			case 0xCBC90:
+			{
+				version = SAMP_037_R5;
+				break;
+			}
 			default:
 			{
 				version = SAMP_UNKNOWN;
