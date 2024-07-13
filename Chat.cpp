@@ -307,7 +307,7 @@ std::optional<HRESULT> Chat::OnPresent(const decltype(mOnPresentHook)& hook, IDi
 }
 
 std::optional<HRESULT> Chat::OnLost(const decltype(mOnResetHook)& hook, IDirect3DDevice9* pDevice, D3DPRESENT_PARAMETERS* parameters) {
-
+	ImGui_ImplDX9_InvalidateDeviceObjects();
 	return std::nullopt;
 }
 
