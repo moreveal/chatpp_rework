@@ -2,6 +2,7 @@
 #define GAME_STRUCTURES_H
 
 #include <cstdint>
+#include <d3d9.h>
 
 #pragma pack(push, 1)
 struct CChatEntry
@@ -15,9 +16,35 @@ struct CChatEntry
 	uint32_t            m_prefixColor;
 };
 
+struct CScrollBar
+{
+	uint8_t pad0[142];
+	uint32_t m_nPos;
+};
+
+struct CFont
+{
+	void** m_lpVtbl;
+	uint32_t* m_pFont;
+};
+
+struct CFonts
+{
+	CFont* m_pFont;
+	CFont* m_pLittleFont;
+	CFont* m_pShadow;
+	CFont* m_pLittleShadow;
+	CFont* m_pLicensePlateFont;
+	uint32_t m_pDefaultSprite;
+	IDirect3DDevice9* m_pDevice;
+	char* m_szTempBuffer;
+	int m_nCharHeight;
+	int m_nLittleCharHeight;
+};
+
 struct CChat
 {
-	uint32_t            m_nPageSize;
+	int                 m_nPageSize;
 	uint32_t            m_szLastMessage;
 	int                 m_nMode;
 	bool                m_bTimestamp;
@@ -26,13 +53,13 @@ struct CChat
 	char                m_szLogPath[261];
 	uint32_t            m_pGameUi;
 	uint32_t            m_pEditbox;
-	uint32_t            m_pScrollbar;
+	CScrollBar*         m_pScrollbar;
 	uint32_t            m_textColor;
 	uint32_t            m_infoColor;
 	uint32_t            m_debugColor;
 	long                m_nWindowBottom;
 	CChatEntry          m_entry[100];
-	uint32_t            m_pFontRenderer;
+	CFonts*             m_pFontRenderer;
 	uint32_t            m_pTextSprit;
 	uint32_t            m_pSprite;
 	uint32_t            m_pDevice;
@@ -51,6 +78,11 @@ struct CChat
 struct CRect
 {
 	size_t x1, y1, x2, y2;
+
+	CRect()
+		: x1(SIZE_MAX), y1(SIZE_MAX),
+		x2(SIZE_MAX), y2(SIZE_MAX)
+	{}
 
 	bool operator==(const CRect& other) const {
 		return x1 == other.x1 && y1 == other.y1 && x2 == other.x2 && y2 == other.y2;

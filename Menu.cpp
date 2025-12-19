@@ -27,7 +27,7 @@ uint32_t Menu::ImVec4ToARGB(const ImVec4& color)
 
 void Menu::Render()
 {
-	const auto& mSelectedLine = Chat::getInstance().mSelectedLine;
+	const auto& mSelectedLine = Chat::getInstance().mSelectedEntry;
 
 	const auto& io = ImGui::GetIO();
 	
@@ -43,8 +43,12 @@ void Menu::Render()
 	{
 		if (ImGui::Begin("##SelectedLine", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBackground))
 		{
-			const auto& position = Chat::getInstance().getChatEntryManager().get(mSelectedLine);
-			const auto& rect = position.rect;
+			auto* position = Chat::getInstance().getChatEntryManager().getByEntryId(mSelectedLine);
+
+			if (!position)
+				return;
+
+			const auto& rect = position->rect;
 			const auto& charHeight = static_cast<size_t>(Chat::getInstance().pChat->m_nCharHeight);
 			
 			const auto
@@ -74,7 +78,7 @@ void Menu::Render()
 
 		if (ImGui::BeginPopupContextItem("TextContextMenu"))
 		{
-			if (chat.mSelectedLine != -1)
+			if (chat.mSelectedEntry != -1)
 			{
 				ImGui::PushItemWidth(350.0f);
 				ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(12.0f, 12.0f));
@@ -83,7 +87,7 @@ void Menu::Render()
 				if (ImGui::MenuItem("Copy"))
 				{
 					const bool with_colors = (GetKeyState(VK_SHIFT) & 0x8000) != 0; // Hold shift
-					std::string text(chat.pChat->m_entry[chat.mSelectedLine].m_szText);
+					std::string text(chat.pChat->m_entry[chat.mSelectedEntry].m_szText);
 					if (!with_colors)
 					{
 						for (size_t pos = 0; pos + 7 < text.size();)
@@ -112,14 +116,14 @@ void Menu::Render()
 				}
 				if (ImGui::MenuItem(u8"Delete"))
 				{
-					Chat::sampDeleteChatLine(chat.mSelectedLine);
+					Chat::sampDeleteChatLine(chat.mSelectedEntry);
 				}
 				if (ImGui::MenuItem("Edit"))
 				{
 					const auto& pChat = Chat::getInstance().pChat;
 
 					editLineBuffer[0] = '\0';
-					strcat(editLineBuffer, chat.convertToUTF8(pChat->m_entry[chat.mSelectedLine].m_szText).c_str());
+					strcat(editLineBuffer, chat.convertToUTF8(pChat->m_entry[chat.mSelectedEntry].m_szText).c_str());
 					editLineColor = ARGBToImVec4(pChat->m_entry[mSelectedLine].m_textColor);
 
 					editLineActive = true;
@@ -138,7 +142,7 @@ void Menu::Render()
 		}
 	}
 
-	if (IsEditLineActive() && chat.mSelectedLine > -1)
+	if (IsEditLineActive() && chat.mSelectedEntry > -1)
 	{
 		ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.12f, 0.9f));
 		if (ImGui::Begin("##EditLine", &editLineActive, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBackground))
@@ -172,13 +176,13 @@ void Menu::Render()
 
 			if (ImGui::InputText("##ChatLine", editLineBuffer, IM_ARRAYSIZE(editLineBuffer)))
 			{
-				if (chat.mSelectedLine > -1)
+				if (chat.mSelectedEntry > -1)
 				{
 					const auto& pChat = chat.pChat;
 
-					pChat->m_entry[chat.mSelectedLine].m_szText[0] = '\0';
+					pChat->m_entry[chat.mSelectedEntry].m_szText[0] = '\0';
 					const std::string text(Chat::convertFromUTF8(editLineBuffer));
-					strcat(pChat->m_entry[chat.mSelectedLine].m_szText, text.c_str());
+					strcat(pChat->m_entry[chat.mSelectedEntry].m_szText, text.c_str());
 					chat.chatUpdate();
 				}
 			}
@@ -263,5 +267,5 @@ void Menu::CloseEditLine()
 {
 	this->editLineActive = false;
 	Chat::setSampCursorMode(0);
-	Chat::getInstance().mSelectedLine = -1;
+	Chat::getInstance().mSelectedEntry = -1;
 }

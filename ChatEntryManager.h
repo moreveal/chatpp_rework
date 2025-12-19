@@ -2,51 +2,35 @@
 #define CHAT_ENTRY_MANAGER_H
 
 #define MAX_PAGESIZE 64
+
 #include "GameStructures.h"
 #include <vector>
 
-struct ChatEntryPosition {
-	CRect rect;
-	int index;
-
-	ChatEntryPosition()
-	{
-		CRect rect;
-		rect.x1 = -1;
-		rect.y1 = -1;
-		rect.x2 = -1;
-		rect.y2 = -1;
-		this->rect = rect;
-
-		index = -1;
-	}
-
-	ChatEntryPosition(const CRect rect, const int index)
-	{
-		this->rect = rect;
-		this->index = index;
-	}
+struct ChatEntryPosition
+{
+    CRect rect{};
+    int   entryId;     // absolute row ID
+    int   screenIndex; // screen ID
 };
 
 class ChatEntryManager
 {
 private:
-	CChat*                              pChat = nullptr;
-	int                                 curLineRenderIndex = -1;
-	std::vector<ChatEntryPosition>      entries;
+    CChat* pChat = nullptr;
+    std::vector<ChatEntryPosition> entries;
 
 public:
-	ChatEntryManager();
+    ChatEntryManager();
 
-	void                                push(CRect rect);
-	ChatEntryPosition&                  get(size_t lineIndex);
+    void clear();
+    void push(int entryId, int screenIndex, const CRect& rect);
 
-	int                                 getCurrentLineRenderIndex() { return curLineRenderIndex; }
+    [[nodiscard]]
+    int getEntryIdByScreenCoords(int xPos, int yPos) const;
 
-	void                                setChatPointer(CChat* pChat);
-	[[nodiscard]] int                   getLastLineIndex() const;
-	[[nodiscard]] int                   getLineIndexInScreenCoords(const size_t& xPos, const size_t& yPos) const;
-	[[nodiscard]] uint32_t              getCurrentScrollbarPos() const;
+    void setChatPointer(CChat* ptr);
+    CChat* getChatPointer();
+    ChatEntryPosition* getByEntryId(int entryId);
 };
 
-#endif
+#endif // CHAT_ENTRY_MANAGER_H

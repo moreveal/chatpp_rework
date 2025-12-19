@@ -112,7 +112,7 @@ public:
     // Variables
     CChat*                              pChat = nullptr;
     ChatEntryManager                    mChatEntryManager;
-    int                                 mSelectedLine = -1;
+    int                                 mSelectedEntry = -1;
     
     // Functions
     static uintptr_t                    getSampBaseAddress();

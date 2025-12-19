@@ -5,6 +5,19 @@
 #include "ChatEntryManager.h"
 #include "Menu.h"
 
+struct LineVertex
+{
+	float x, y, z, rhw;
+	D3DCOLOR color;
+};
+
+#define LINE_FVF (D3DFVF_XYZRHW | D3DFVF_DIFFUSE)
+
+struct Rect
+{
+	DWORD top, bottom, left, right;
+};
+
 uintptr_t SAMPGetAddress(SAMPAddressesType type) {
 	static const auto versionIndex = Chat::getSampVersion() - 2;
 	static const auto base = Chat::getSampBaseAddress();
@@ -245,27 +258,30 @@ HRESULT __stdcall Chat::OnWndProc(const decltype(mWndProcHook)& hook, HWND hwnd,
 	// Check for mouse move
 	if (msg == WM_MOUSEMOVE || msg == WM_RBUTTONDOWN) {
 		const auto cursorMode = getInstance().getSampCursorMode();
-		auto& mSelectedLine = getInstance().mSelectedLine;
+		auto& mSelectedEntry = getInstance().mSelectedEntry;
 		const bool isEdit = menu.IsPopupActive() || menu.IsEditLineActive();
 
 		if (cursorMode >= 2 && cursorMode <= 3) // SAMP Cursor is enabled
 		{
 			if (!isEdit)
 			{
-				auto xPos = (uint32_t)GET_X_LPARAM(lParam);
-				auto yPos = (uint32_t)GET_Y_LPARAM(lParam);
+				auto xPos = GET_X_LPARAM(lParam);
+				auto yPos = GET_Y_LPARAM(lParam);
 
-				const auto lineIndex = getChatEntryManager().getLineIndexInScreenCoords(xPos, yPos);
-				if (lineIndex > -1)
-				{
-					mSelectedLine = lineIndex;
+				const auto entryId = getChatEntryManager().getEntryIdByScreenCoords(xPos, yPos);
+				auto& cchat = Chat::getInstance().pChat;
+				if (
+					entryId > -1 &&
+					cchat->m_entry[entryId].m_textColor != 0
+				) {
+					mSelectedEntry = entryId;
 
 					if (msg == WM_RBUTTONDOWN) menu.ShowPopup();
 				}
-				else mSelectedLine = -1;
+				else mSelectedEntry = -1;
 			}
 		}
-		else if (!isEdit) mSelectedLine = -1;
+		else if (!isEdit) mSelectedEntry = -1;
 	}
 
 	// Close editline window by esc/enter + block keys for game
@@ -273,13 +289,13 @@ HRESULT __stdcall Chat::OnWndProc(const decltype(mWndProcHook)& hook, HWND hwnd,
 	{
 		if ((msg == WM_CHAR || msg == WM_KEYUP || msg == WM_KEYDOWN) && (wParam == VK_RETURN || wParam == VK_ESCAPE))
 		{
-			if (msg != WM_KEYUP) return true;
+			if (msg != WM_KEYUP) return TRUE;
 			if (!menu.IsColorPopupActive()) menu.CloseEditLine();
 		}
-		return true;
+		return TRUE;
 	}
 
-	return hook.get_trampoline()(hwnd, msg, wParam, lParam);
+	return hook.call_trampoline(hwnd, msg, wParam, lParam);
 }
 
 std::optional<HRESULT> Chat::OnPresent(const decltype(mOnPresentHook)& hook, IDirect3DDevice9* pDevice, const RECT*, const RECT*, HWND, const RGNDATA*) {
@@ -315,72 +331,101 @@ void Chat::OnReset(const decltype(mOnResetHook)& hook, HRESULT& return_value, ID
 	ImGui_ImplDX9_InvalidateDeviceObjects();
 }
 
+void DrawRect(
+	IDirect3DDevice9* device,
+	float x1, float y1,
+	float x2, float y2,
+	D3DCOLOR color = D3DCOLOR_ARGB(255, 255, 0, 0))
+{
+	LineVertex v[8] =
+	{
+		{ x1, y1, 0.f, 1.f, color }, { x2, y1, 0.f, 1.f, color },
+		{ x2, y1, 0.f, 1.f, color }, { x2, y2, 0.f, 1.f, color },
+		{ x2, y2, 0.f, 1.f, color }, { x1, y2, 0.f, 1.f, color },
+		{ x1, y2, 0.f, 1.f, color }, { x1, y1, 0.f, 1.f, color }
+	};
+
+	device->SetFVF(LINE_FVF);
+	device->DrawPrimitiveUP(
+		D3DPT_LINELIST,
+		4,
+		v,
+		sizeof(LineVertex)
+	);
+}
+
 void* __fastcall Chat::CChat__Render(const decltype(mChatRenderHook)& hook, void* ptr, void*)
 {
-	auto& pChat = getInstance().pChat;
-	static bool getChatPtr = false;
-	if (!getChatPtr)
+	auto chat = reinterpret_cast<CChat*>(ptr);
+
+	int firstLine = max(1, chat->m_pScrollbar->m_nPos);
+	int charH = chat->m_nCharHeight;
+
+	auto& manager = Chat::getInstance().getChatEntryManager();
+	Chat::getInstance().pChat = chat;
+	manager.setChatPointer(chat);
+
+	int maxTextWidth = 445;
+
+	for (int screenIndex = 0; screenIndex < chat->m_nPageSize; ++screenIndex)
 	{
-		// Get chat pointer
-		pChat = static_cast<CChat*>(ptr);
-		getChatEntryManager().setChatPointer(pChat);
-		getChatPtr = true;
+		int entryId = firstLine + screenIndex;
+		auto& entry = chat->m_entry[entryId];
+
+		auto cfont = chat->m_pFontRenderer->m_pFont;
+
+		using DrawTextFn = int(__stdcall*)(
+			void*, void*, const char*, int, RECT*, unsigned int, D3DCOLOR
+			);
+
+		auto drawText = reinterpret_cast<DrawTextFn>(cfont->m_lpVtbl[14]);
+
+		RECT rc{};
+		drawText(cfont, nullptr, entry.m_szText, -1, &rc, DT_CALCRECT, 0);
+
+		int width = rc.right - rc.left;
+
+		if (chat->m_bTimestamp)
+			width += chat->m_nTimestampWidth;
+
+		maxTextWidth = max(maxTextWidth, width);
 	}
 
-	return hook.get_trampoline()(ptr, nullptr);
+	int y = 10;
+
+	for (int screenIndex = 0; screenIndex < chat->m_nPageSize; ++screenIndex)
+	{
+		int entryId = firstLine + screenIndex;
+
+		CRect rect{};
+		rect.x1 = 45;
+		rect.y1 = y;
+		rect.x2 = rect.x1 + maxTextWidth + 5;
+		rect.y2 = y + charH + 1;
+
+		manager.push(entryId, screenIndex, rect);
+
+		y += charH + 1;
+	}
+
+	return hook.call_trampoline(ptr, nullptr);
 }
 
 int __fastcall Chat::CChat__RenderEntry(const decltype(mChatRenderEntryHook)& hook, void* ptr, void*, const char* src, CRect rect, uint32_t color)
 {
-	auto& chat = getInstance();
-
-	if (hook.get_return_address() - SAMPGetAddress(SAMP_ADDRESS_CHAT_RENDER) != 0x13F) { // Not timestamp
-		auto& chatEntryManager = chat.getChatEntryManager();
-
-		// Render was started
-		if (chatEntryManager.getCurrentLineRenderIndex() == -1)
-		{
-			// TODO: Get upper left corner of the chat and save it somewhere
-		}
-
-		// TODO: If position was changed - apply this offsets to the render (same for scrollbar, etc.)
-
-		// Add line to render
-		chatEntryManager.push(rect);
-
-		// Render was finished
-		if (chatEntryManager.getCurrentLineRenderIndex() == -1)
-		{
-			const auto& menu = Menu::getInstance();
-
-			if (!menu.IsPopupActive() && !menu.IsEditLineActive())
-			{
-				// Update line index (for scroll, etc.)
-				POINT cursorPos;
-				if (GetCursorPos(&cursorPos))
-				{
-					const auto lineIndex = getChatEntryManager().getLineIndexInScreenCoords(cursorPos.x, cursorPos.y);
-					if (lineIndex > -1) {
-						chat.mSelectedLine = lineIndex;
-					}
-				}
-			}
-		}
-	}
-
-	return hook.get_trampoline()(ptr, nullptr, src, rect, color);
+	return hook.call_trampoline(ptr, nullptr, src, rect, color);
 }
 
 void __fastcall Chat::CChat__AddEntry(const decltype(mChatAddEntryHook)& hook, void* ptr, void*, int nType, const char* szText, const char* szPrefix, D3DCOLOR textColor, D3DCOLOR prefixColor)
 {
-	auto& mSelectedLine = getInstance().mSelectedLine;
-	if (mSelectedLine > -1) mSelectedLine--;
+	auto& mSelected = getInstance().mSelectedEntry;
+	if (mSelected > -1) mSelected--;
 
-	return hook.get_trampoline()(ptr, nullptr, nType, szText, szPrefix, textColor, prefixColor);
+	return hook.call_trampoline(ptr, nullptr, nType, szText, szPrefix, textColor, prefixColor);
 }
 
 int __fastcall Chat::CChat__RecalcFontSize(const decltype(mChatRecalcFontSizeHook)& hook, void* ptr, void*)
 {
 	Menu::getInstance().RebuildFonts();
-	return hook.get_trampoline()(ptr, nullptr);
+	return hook.call_trampoline(ptr, nullptr);
 }
