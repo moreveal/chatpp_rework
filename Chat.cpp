@@ -37,18 +37,7 @@ void Chat::MainLoop(const decltype(mainLoopHook)& hook)
 	{
 		// Setup hooks
 		auto& instance = getInstance();
-
-		SetHook(instance.mWndProcHook, SAMPGetAddress(SAMP_ADDRESS_CHATINPUT_WNDPROC), &OnWndProc);
-
-		SetHook(instance.mChatRenderHook, SAMPGetAddress(SAMP_ADDRESS_CHAT_RENDER), &CChat__Render);
 		SetHook(instance.mChatRenderEntryHook, SAMPGetAddress(SAMP_ADDRESS_CHAT_RENDER_ENTRY), &CChat__RenderEntry);
-		SetHook(instance.mChatAddEntryHook, SAMPGetAddress(SAMP_ADDRESS_CHAT_ADD_ENTRY), &CChat__AddEntry);
-		SetHook(instance.mChatRecalcFontSizeHook, SAMPGetAddress(SAMP_ADDRESS_RECALC_FONTSIZE), &CChat__RecalcFontSize);
-
-		instance.mOnPresentHook.before += instance.OnPresent;
-		instance.mOnResetHook.before += instance.OnLost;
-		instance.mOnResetHook.after += instance.OnReset;
-
 		// Setup patches
 		SetPatch(SAMPGetAddress(SAMP_ADDRESS_COMMAND_SET_PAGESIZE) + 0x2F, { 0x83, 0xFE, 0x40 }); // cmp esi, 0x40
 		SetPatch(SAMPGetAddress(SAMP_ADDRESS_COMMAND_SET_PAGESIZE_HINT) + 0xD, { '6', '4' }); // "20" -> "64"
@@ -292,7 +281,6 @@ HRESULT __stdcall Chat::OnWndProc(const decltype(mWndProcHook)& hook, HWND hwnd,
 			if (msg != WM_KEYUP) return TRUE;
 			if (!menu.IsColorPopupActive()) menu.CloseEditLine();
 		}
-		return TRUE;
 	}
 
 	return hook.call_trampoline(hwnd, msg, wParam, lParam);
@@ -305,6 +293,11 @@ std::optional<HRESULT> Chat::OnPresent(const decltype(mOnPresentHook)& hook, IDi
 		ImGui::CreateContext();
 		ImGui_ImplWin32_Init(getGameHWND());
 		ImGui_ImplDX9_Init(pDevice);
+
+		ImGui_ImplDX9_InvalidateDeviceObjects();
+		ImGui_ImplDX9_CreateDeviceObjects();
+
+		Menu::getInstance().RebuildFonts();
 
 		menu.imguiInited = true;
 	}
@@ -413,6 +406,22 @@ void* __fastcall Chat::CChat__Render(const decltype(mChatRenderHook)& hook, void
 
 int __fastcall Chat::CChat__RenderEntry(const decltype(mChatRenderEntryHook)& hook, void* ptr, void*, const char* src, CRect rect, uint32_t color)
 {
+	static bool init = false;
+	if (!init)
+	{
+		auto& instance = getInstance();
+		SetHook(instance.mChatRenderHook, SAMPGetAddress(SAMP_ADDRESS_CHAT_RENDER), &CChat__Render);
+		SetHook(instance.mWndProcHook, SAMPGetAddress(SAMP_ADDRESS_CHATINPUT_WNDPROC), &OnWndProc);
+
+		SetHook(instance.mChatAddEntryHook, SAMPGetAddress(SAMP_ADDRESS_CHAT_ADD_ENTRY), &CChat__AddEntry);
+		SetHook(instance.mChatRecalcFontSizeHook, SAMPGetAddress(SAMP_ADDRESS_RECALC_FONTSIZE), &CChat__RecalcFontSize);
+
+		instance.mOnPresentHook.before += instance.OnPresent;
+		instance.mOnResetHook.before += instance.OnLost;
+		instance.mOnResetHook.after += instance.OnReset;
+
+		init = true;
+	}
 	return hook.call_trampoline(ptr, nullptr, src, rect, color);
 }
 
