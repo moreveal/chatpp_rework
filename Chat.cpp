@@ -369,7 +369,7 @@ void* __fastcall Chat::CChat__Render(const decltype(mChatRenderHook)& hook, void
 
 		using DrawTextFn = int(__stdcall*)(
 			void*, void*, const char*, int, RECT*, unsigned int, D3DCOLOR
-			);
+		);
 
 		auto drawText = reinterpret_cast<DrawTextFn>(cfont->m_lpVtbl[14]);
 

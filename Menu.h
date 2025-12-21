@@ -21,6 +21,8 @@ public:
     bool            colorPopupActive = false;
 
     char            editLineBuffer[256];
+    char            editPrefixBuffer[64]{};
+    ImVec4          editPrefixColor{1.0f, 1.0f, 1.0f, 1.0f};
     ImVec4          editLineColor{1.0f, 1.0f, 1.0f, 1.0f};
 
 	Menu() = default;

@@ -87,7 +87,17 @@ void Menu::Render()
 				if (ImGui::MenuItem("Copy"))
 				{
 					const bool with_colors = (GetKeyState(VK_SHIFT) & 0x8000) != 0; // Hold shift
-					std::string text(chat.pChat->m_entry[chat.mSelectedEntry].m_szText);
+
+					const auto& entry = chat.pChat->m_entry[chat.mSelectedEntry];
+					
+					std::string text;
+					if (entry.m_prefixColor != 0 && entry.m_szPrefix[0] != '\0')
+					{
+						text += entry.m_szPrefix;
+						text += " ";
+					}
+					text += entry.m_szText;
+
 					if (!with_colors)
 					{
 						for (size_t pos = 0; pos + 7 < text.size();)
@@ -122,9 +132,17 @@ void Menu::Render()
 				{
 					const auto& pChat = Chat::getInstance().pChat;
 
+					auto& chatEntry = pChat->m_entry[chat.mSelectedEntry];
+
+					// text
 					editLineBuffer[0] = '\0';
-					strcat(editLineBuffer, chat.convertToUTF8(pChat->m_entry[chat.mSelectedEntry].m_szText).c_str());
-					editLineColor = ARGBToImVec4(pChat->m_entry[mSelectedLine].m_textColor);
+					strcat(editLineBuffer, chat.convertToUTF8(chatEntry.m_szText).c_str());
+					editLineColor = ARGBToImVec4(chatEntry.m_textColor);
+
+					// prefix
+					editPrefixBuffer[0] = '\0';
+					strcat(editPrefixBuffer, chat.convertToUTF8(chatEntry.m_szPrefix).c_str());
+					editPrefixColor = ARGBToImVec4(chatEntry.m_prefixColor);
 
 					editLineActive = true;
 				}
@@ -150,10 +168,55 @@ void Menu::Render()
 			ImGui::SetWindowPos(ImVec2((io.DisplaySize.x - ImGui::GetWindowWidth()) * 0.5f,
 				(io.DisplaySize.y - ImGui::GetWindowHeight()) * 0.5f));
 
-			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(12.0f, 12.0f));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 4.0f));
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 12.0f));
 			ImGui::PushStyleColor(ImGuiCol_TextSelectedBg, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
 			ImGui::PushItemWidth(io.DisplaySize.x * (750.0f / 1920));
+
+			const bool hasPrefix = (chat.pChat->m_entry[mSelectedLine].m_prefixColor != 0);
+			
+			if (hasPrefix)
+			{
+				// ----- Prefix color button -----
+				if (ImGui::ColorButton("##PrefixColorBtn", editPrefixColor, ImGuiColorEditFlags_NoTooltip))
+				{
+					ImGui::OpenPopup("##PrefixColorPopup");
+				}
+
+				if (ImGui::BeginPopup("##PrefixColorPopup"))
+				{
+					if (ImGui::ColorPicker3("##PrefixPicker",
+						(float*)&editPrefixColor,
+						ImGuiColorEditFlags_NoSidePreview | ImGuiColorEditFlags_NoSmallPreview))
+					{
+						auto& entry = chat.pChat->m_entry[mSelectedLine];
+						entry.m_prefixColor = ImVec4ToARGB(editPrefixColor);
+						chat.chatUpdate();
+					}
+					ImGui::EndPopup();
+				}
+
+				ImGui::SameLine(0.0f, 5.0f);
+
+				// ----- Prefix text -----
+				if (ImGui::InputText("##PrefixText", editPrefixBuffer, IM_ARRAYSIZE(editPrefixBuffer)))
+				{
+					auto& entry = chat.pChat->m_entry[mSelectedLine];
+					entry.m_szPrefix[0] = '\0';
+					const std::string prefix(Chat::convertFromUTF8(editPrefixBuffer));
+					strcat(entry.m_szPrefix, prefix.c_str());
+					chat.chatUpdate();
+				}
+
+				// ----- Outline -----
+				ImVec2 pos = ImGui::GetItemRectMin();
+				ImVec2 size = ImGui::GetItemRectSize();
+				ImGui::GetWindowDrawList()->AddRect(
+					pos,
+					ImVec2(pos.x + size.x, pos.y + size.y),
+					IM_COL32(255, 255, 255, 255)
+				);
+			}
 
 			if (ImGui::ColorButton("ColorButton", editLineColor, ImGuiColorEditFlags_NoTooltip))
 			{
