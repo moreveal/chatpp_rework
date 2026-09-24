@@ -1,6 +1,12 @@
 ﻿#include "Chat.h"
 
 #include <iostream>
+#include <algorithm>
+#include <array>
+#include <sstream>
+
+#undef min
+#undef max
 
 #include "ChatEntryManager.h"
 #include "Menu.h"
@@ -18,39 +24,113 @@ struct Rect
 	DWORD top, bottom, left, right;
 };
 
-uintptr_t SAMPGetAddress(SAMPAddressesType type) {
-	static const auto versionIndex = Chat::getSampVersion() - 2;
-	static const auto base = Chat::getSampBaseAddress();
-	return (base + SAMPAddresses[versionIndex][type]);
+namespace {
+std::array<uintptr_t, SAMP_ADDRESS_AMOUNT> sampAddresses{};
+
+uintptr_t findUniquePattern(HMODULE module, const char* pattern, bool executable)
+{
+	if (!module) return 0;
+	std::vector<int> bytes;
+	std::istringstream stream(pattern);
+	std::string token;
+	while (stream >> token)
+		bytes.push_back(token == "??" ? -1 : static_cast<int>(std::strtoul(token.c_str(), nullptr, 16)));
+	if (bytes.empty()) return 0;
+
+	const auto* base = reinterpret_cast<const uint8_t*>(module);
+	const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
+	if (dos->e_magic != IMAGE_DOS_SIGNATURE) return 0;
+	const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
+	if (nt->Signature != IMAGE_NT_SIGNATURE) return 0;
+
+	uintptr_t match = 0;
+	const auto* section = IMAGE_FIRST_SECTION(nt);
+	for (unsigned i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++section)
+	{
+		if (!(section->Characteristics & IMAGE_SCN_MEM_READ) ||
+			(executable && !(section->Characteristics & IMAGE_SCN_MEM_EXECUTE))) continue;
+		const size_t length = section->Misc.VirtualSize;
+		if (length < bytes.size()) continue;
+		const auto* start = base + section->VirtualAddress;
+		for (size_t pos = 0; pos <= length - bytes.size(); ++pos)
+		{
+			size_t j = 0;
+			for (; j < bytes.size(); ++j)
+				if (bytes[j] >= 0 && start[pos + j] != bytes[j]) break;
+			if (j != bytes.size()) continue;
+			if (match) return 0; // Ambiguous signatures must never install a hook.
+			match = reinterpret_cast<uintptr_t>(start + pos);
+		}
+	}
+	return match;
 }
 
-uintptr_t SAMPGetOffset(SAMPAddressesType type)
+uintptr_t SAMPGetAddress(SAMPAddressesType type) { return sampAddresses[type]; }
+uintptr_t SAMPGetOffset(SAMPAddressesType type) { return sampAddresses[type]; }
+
+bool resolveSampSymbols()
 {
-	static const auto versionIndex = Chat::getSampVersion() - 2;
-	return SAMPAddresses[versionIndex][type];
+	const auto module = reinterpret_cast<HMODULE>(Chat::getSampBaseAddress());
+	if (!module) return false;
+	struct Signature { SAMPAddressesType type; const char* pattern; bool code; };
+	static constexpr Signature signatures[] = {
+		{ SAMP_ADDRESS_CHATINPUT_WNDPROC, "A1 ?? ?? ?? ?? 83 EC 10 83 F8 0A", true },
+		{ SAMP_ADDRESS_CHAT_RENDER, "55 8B EC 83 E4 F8 83 EC 70", true },
+		{ SAMP_ADDRESS_CHAT_RENDER_ENTRY, "55 8B EC 83 E4 F8 81 EC 0C 02 00 00", true },
+		{ SAMP_ADDRESS_CHAT_ADD_ENTRY, "55 56 8B E9 57 8D BD ?? ?? ?? ?? 8D B5 ?? ?? ?? ?? B9 9C 18 00 00", true },
+		{ SAMP_ADDRESS_CHAT_GET_FONTFACE, "8B 0D ?? ?? ?? ?? 85 C9 74 1F 68 ?? ?? ?? ?? E8 ?? ?? ?? ?? 85 C0 74 11", true },
+		{ SAMP_ADDRESS_COMMAND_SET_PAGESIZE, "51 56 8B 74 24 ?? 8B C6 8D 50 ?? EB ?? 8D 49 ?? 8A 08 40 84 C9 75 ?? 2B C2 89 44 24 ?? 74 ?? 56 E8 ?? ?? ?? ?? 8B F0 83 C4 04 83 FE 0A", true },
+		{ SAMP_ADDRESS_COMMAND_SET_PAGESIZE_HINT, "70 61 67 65 73 69 7A 65 20 5B 31 30 2D 32 30 5D 20 28 6C 69 6E 65 73 29", false },
+		{ SAMP_ADDRESS_FONTSIZE_VALUE, "A1 ?? ?? ?? ?? 3D 00 04 00 00", true },
+		{ SAMP_ADDRESS_RECALC_FONTSIZE, "83 EC 10 56 68 00 00 00 FF", true },
+		{ SAMP_ADDRESS_GAME_SET_CURSOR_MODE, "55 8B EC 8B 45 ?? 83 F8 02", true },
+		{ SAMP_ADDRESS_CHAT_DRAW, "56 8B F1 8B 86 ?? ?? ?? ?? 85 C0 0F 84 ?? ?? ?? ?? 8B 4E", true },
+		{ SAMP_ADDRESS_INPUT_OPEN, "83 EC 10 56 8B F1 8B 86", true },
+		{ SAMP_ADDRESS_GAME_MENU_VISIBLE, "8B 0D ?? ?? ?? ?? 33 C0 85 C9 0F 95 C0", true }
+	};
+	std::array<uintptr_t, SAMP_ADDRESS_AMOUNT> resolved{};
+	for (const auto& sig : signatures)
+	{
+		resolved[sig.type] = findUniquePattern(module, sig.pattern, sig.code);
+		if (!resolved[sig.type]) return false;
+	}
+	const auto gameReference = findUniquePattern(module,
+		"8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 85 C0 74 ?? C7 86 D6 63 00 00 00 00 00 00", true);
+	if (!gameReference) return false;
+	resolved[SAMP_ADDRESS_GLOBAL_GAME_PTR] = *reinterpret_cast<const uint32_t*>(gameReference + 2);
+	const auto cursorModeWrite = findUniquePattern(module,
+		"C7 46 ?? 02 00 00 00 5F 5E 5D C2 08 00", true);
+	if (!cursorModeWrite) return false;
+	resolved[SAMP_OFFSET_GLOBAL_GAME_MOUSEMODE] = *reinterpret_cast<const uint8_t*>(cursorModeWrite + 2);
+	if (resolved[SAMP_OFFSET_GLOBAL_GAME_MOUSEMODE] == 0) return false;
+	sampAddresses = resolved;
+	return true;
 }
 
-void Chat::MainLoop(const decltype(mainLoopHook)& hook)
+bool patchBytes(uintptr_t address, const std::vector<unsigned char>& expected, const std::vector<unsigned char>& replacement)
 {
-	static bool init = false;
-	if (!init && isSampAvailable())
-	{
-		// Setup hooks
-		auto& instance = getInstance();
-		SetHook(instance.mChatRenderEntryHook, SAMPGetAddress(SAMP_ADDRESS_CHAT_RENDER_ENTRY), &CChat__RenderEntry);
-		// Setup patches
-		SetPatch(SAMPGetAddress(SAMP_ADDRESS_COMMAND_SET_PAGESIZE) + 0x2F, { 0x83, 0xFE, 0x40 }); // cmp esi, 0x40
-		SetPatch(SAMPGetAddress(SAMP_ADDRESS_COMMAND_SET_PAGESIZE_HINT) + 0xD, { '6', '4' }); // "20" -> "64"
+	if (!address || expected.size() != replacement.size()) return false;
+	if (memcmp(reinterpret_cast<void*>(address), replacement.data(), replacement.size()) == 0) return true;
+	if (memcmp(reinterpret_cast<void*>(address), expected.data(), expected.size()) != 0) return false;
+	return SetPatch(address, replacement);
+}
+}
 
-		init = true;
-	}
-	else if (init)
-	{
-		// While true
-
-	}
-
-	return hook.get_trampoline()();
+void Chat::InitializeSamp()
+{
+	static bool initialized = false;
+	if (initialized || !isSampAvailable() || !resolveSampSymbols()) return;
+	auto& instance = getInstance();
+	const auto pageSize = SAMPGetAddress(SAMP_ADDRESS_COMMAND_SET_PAGESIZE);
+	const auto pageHint = SAMPGetAddress(SAMP_ADDRESS_COMMAND_SET_PAGESIZE_HINT);
+	if (!patchBytes(pageSize + 0x2F, {0x83, 0xFE, 0x14}, {0x83, 0xFE, 0x40}) ||
+		!patchBytes(pageHint + 0xD, {'2', '0'}, {'6', '4'})) return;
+	SetHook(instance.mChatRenderHook, SAMPGetAddress(SAMP_ADDRESS_CHAT_RENDER), &CChat__Render);
+	SetHook(instance.mChatRenderEntryHook, SAMPGetAddress(SAMP_ADDRESS_CHAT_RENDER_ENTRY), &CChat__RenderEntry);
+	SetHook(instance.mWndProcHook, SAMPGetAddress(SAMP_ADDRESS_CHATINPUT_WNDPROC), &OnWndProc);
+	SetHook(instance.mChatAddEntryHook, SAMPGetAddress(SAMP_ADDRESS_CHAT_ADD_ENTRY), &CChat__AddEntry);
+	SetHook(instance.mChatRecalcFontSizeHook, SAMPGetAddress(SAMP_ADDRESS_RECALC_FONTSIZE), &CChat__RecalcFontSize);
+	initialized = true;
 }
 
 uintptr_t Chat::getSampBaseAddress()
@@ -60,41 +140,19 @@ uintptr_t Chat::getSampBaseAddress()
 
 bool Chat::isSampAvailable()
 {
-	return *reinterpret_cast<uintptr_t*>(0x00C8D4C0) == 9 && getSampBaseAddress() > 0;
+	return getSampBaseAddress() != 0;
 }
 
 bool Chat::isGTAMenuActive()
 {
-	return *reinterpret_cast<uint32_t*>(0xBA67A4) != 0;
-}
-
-SampVersion Chat::getSampVersion()
-{
-	static SampVersion version = SAMP_NOT_LOADED;
-	if (version <= SAMP_UNKNOWN)
-	{
-		const auto base = getSampBaseAddress();
-		if (base == 0) return SAMP_NOT_LOADED;
-
-		const auto* ntHeader = reinterpret_cast<IMAGE_NT_HEADERS*>(base + reinterpret_cast<IMAGE_DOS_HEADER*>(base)->e_lfanew);
-		static const auto entryPoint = ntHeader->OptionalHeader.AddressOfEntryPoint;
-		for (size_t i = 0; i < SAMPEntryPoints.size(); i++)
-		{
-			const auto& curEntryPoint = SAMPEntryPoints[i];
-			
-			if (curEntryPoint == entryPoint)
-			{
-				return static_cast<SampVersion>(i + 2);
-			}
-		}
-	}
-	return SAMP_UNKNOWN;
+	const auto game = *reinterpret_cast<void**>(SAMPGetAddress(SAMP_ADDRESS_GLOBAL_GAME_PTR));
+	if (!game) return false;
+	return reinterpret_cast<int(__thiscall*)(void*)>(SAMPGetAddress(SAMP_ADDRESS_GAME_MENU_VISIBLE))(game) != 0;
 }
 
 HWND Chat::getGameHWND()
 {
-	static const HWND gameHWND = **reinterpret_cast<HWND**>(0xC17054);
-	return gameHWND;
+	return getInstance().mGameWindow;
 }
 
 ChatEntryManager& Chat::getChatEntryManager()
@@ -242,7 +300,7 @@ HRESULT __stdcall Chat::OnWndProc(const decltype(mWndProcHook)& hook, HWND hwnd,
 	MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, reinterpret_cast<char*>(&wParam), 1, &wch, 1);
 
 	// ImGui key handle
-	ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam);
+	if (menu.imguiInited) ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam);
 
 	// Check for mouse move
 	if (msg == WM_MOUSEMOVE || msg == WM_RBUTTONDOWN) {
@@ -261,7 +319,7 @@ HRESULT __stdcall Chat::OnWndProc(const decltype(mWndProcHook)& hook, HWND hwnd,
 				auto& cchat = Chat::getInstance().pChat;
 				if (
 					entryId > -1 &&
-					cchat->m_entry[entryId].m_textColor != 0
+					cchat && cchat->m_entry[entryId].m_textColor != 0
 				) {
 					mSelectedEntry = entryId;
 
@@ -288,6 +346,10 @@ HRESULT __stdcall Chat::OnWndProc(const decltype(mWndProcHook)& hook, HWND hwnd,
 
 std::optional<HRESULT> Chat::OnPresent(const decltype(mOnPresentHook)& hook, IDirect3DDevice9* pDevice, const RECT*, const RECT*, HWND, const RGNDATA*) {
 	auto& menu = Menu::getInstance();
+	D3DDEVICE_CREATION_PARAMETERS creation{};
+	if (SUCCEEDED(pDevice->GetCreationParameters(&creation))) getInstance().mGameWindow = creation.hFocusWindow;
+	InitializeSamp();
+	if (!SAMPGetAddress(SAMP_ADDRESS_CHAT_RENDER) || !getInstance().pChat) return std::nullopt;
 
 	if (!menu.imguiInited) {
 		ImGui::CreateContext();
@@ -316,12 +378,12 @@ std::optional<HRESULT> Chat::OnPresent(const decltype(mOnPresentHook)& hook, IDi
 }
 
 std::optional<HRESULT> Chat::OnLost(const decltype(mOnResetHook)& hook, IDirect3DDevice9* pDevice, D3DPRESENT_PARAMETERS* parameters) {
-	ImGui_ImplDX9_InvalidateDeviceObjects();
+	if (Menu::getInstance().imguiInited) ImGui_ImplDX9_InvalidateDeviceObjects();
 	return std::nullopt;
 }
 
 void Chat::OnReset(const decltype(mOnResetHook)& hook, HRESULT& return_value, IDirect3DDevice9* pDevice, D3DPRESENT_PARAMETERS* parameters) {
-	ImGui_ImplDX9_InvalidateDeviceObjects();
+	if (Menu::getInstance().imguiInited) ImGui_ImplDX9_InvalidateDeviceObjects();
 }
 
 void DrawRect(
@@ -351,7 +413,7 @@ void* __fastcall Chat::CChat__Render(const decltype(mChatRenderHook)& hook, void
 {
 	auto chat = reinterpret_cast<CChat*>(ptr);
 
-	int firstLine = max(1, chat->m_pScrollbar->m_nPos);
+	int firstLine = std::max(1, chat->m_pScrollbar->m_nPos);
 	int charH = chat->m_nCharHeight;
 
 	auto& manager = Chat::getInstance().getChatEntryManager();
@@ -381,7 +443,7 @@ void* __fastcall Chat::CChat__Render(const decltype(mChatRenderHook)& hook, void
 		if (chat->m_bTimestamp)
 			width += chat->m_nTimestampWidth;
 
-		maxTextWidth = max(maxTextWidth, width);
+		maxTextWidth = std::max(maxTextWidth, width);
 	}
 
 	int y = 10;
@@ -406,23 +468,7 @@ void* __fastcall Chat::CChat__Render(const decltype(mChatRenderHook)& hook, void
 
 int __fastcall Chat::CChat__RenderEntry(const decltype(mChatRenderEntryHook)& hook, void* ptr, void*, const char* src, CRect rect, uint32_t color)
 {
-	static bool init = false;
-	if (!init)
-	{
-		auto& instance = getInstance();
-		SetHook(instance.mChatRenderHook, SAMPGetAddress(SAMP_ADDRESS_CHAT_RENDER), &CChat__Render);
-		SetHook(instance.mWndProcHook, SAMPGetAddress(SAMP_ADDRESS_CHATINPUT_WNDPROC), &OnWndProc);
-
-		SetHook(instance.mChatAddEntryHook, SAMPGetAddress(SAMP_ADDRESS_CHAT_ADD_ENTRY), &CChat__AddEntry);
-		SetHook(instance.mChatRecalcFontSizeHook, SAMPGetAddress(SAMP_ADDRESS_RECALC_FONTSIZE), &CChat__RecalcFontSize);
-
-		instance.mOnPresentHook.before += instance.OnPresent;
-		instance.mOnResetHook.before += instance.OnLost;
-		instance.mOnResetHook.after += instance.OnReset;
-
-		init = true;
-	}
-	return hook.call_trampoline(ptr, nullptr, src, rect, color);
+    return hook.call_trampoline(ptr, nullptr, src, rect, color);
 }
 
 void __fastcall Chat::CChat__AddEntry(const decltype(mChatAddEntryHook)& hook, void* ptr, void*, int nType, const char* szText, const char* szPrefix, D3DCOLOR textColor, D3DCOLOR prefixColor)

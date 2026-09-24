@@ -10,7 +10,9 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
 			DisableThreadLibraryCalls(hModule);
 
 			auto& chat = Chat::getInstance();
-			chat.SetHook(chat.mainLoopHook, 0x53E968, chat.MainLoop);
+			chat.mOnPresentHook.before += chat.OnPresent;
+			chat.mOnResetHook.before += chat.OnLost;
+			chat.mOnResetHook.after += chat.OnReset;
 
 			//AllocConsole(); freopen("CONOUT$", "w", stdout); // Only logging
 			break;
