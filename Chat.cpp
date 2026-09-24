@@ -630,6 +630,7 @@ void __fastcall Chat::CChat__AddEntry(const decltype(mChatAddEntryHook)& hook, v
 
 int __fastcall Chat::CChat__RecalcFontSize(const decltype(mChatRecalcFontSizeHook)& hook, void* ptr, void*)
 {
+	const auto result = hook.call_trampoline(ptr, nullptr);
 	Menu::getInstance().RebuildFonts();
-	return hook.call_trampoline(ptr, nullptr);
+	return result;
 }

@@ -278,6 +278,8 @@ void Menu::Render()
 
 void Menu::RebuildFonts()
 {
+	if (!ImGui::GetCurrentContext()) return;
+
 	std::string fontPath(256, '\0');
 
 	if (SHGetSpecialFolderPathA(Chat::getGameHWND(), fontPath.data(), CSIDL_FONTS, false))
