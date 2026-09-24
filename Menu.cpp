@@ -38,6 +38,21 @@ void Menu::Render()
 	// Stop render
 	if (Chat::isGTAMenuActive()) return;
 	if (!cursorEnabled && !IsPopupActive()) return;
+	if (cursorEnabled && Chat::getInstance().pChat && Chat::isInputOpen())
+	{
+		const RECT handle = Chat::getMoveHandleRect();
+		const bool hovered = Chat::isMoveHandleHovered() || Chat::getInstance().mDragging;
+		auto* draw = ImGui::GetForegroundDrawList();
+		const float x = (handle.left + handle.right) * 0.5f;
+		const float y = (handle.top + handle.bottom) * 0.5f;
+		const ImVec2 topLeft(x - 5.0f, y - 5.0f);
+		const ImVec2 bottomRight(x + 5.0f, y + 5.0f);
+		draw->AddRectFilled(topLeft, bottomRight,
+			hovered ? IM_COL32(235, 235, 235, 170) : IM_COL32(210, 210, 210, 30));
+		draw->AddRect(topLeft, bottomRight,
+			hovered ? IM_COL32(235, 235, 235, 230) : IM_COL32(210, 210, 210, 85));
+	}
+
 	if (mSelectedLine > -1)
 	{
 		auto* position = Chat::getInstance().getChatEntryManager().getByEntryId(mSelectedLine);

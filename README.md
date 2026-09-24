@@ -8,8 +8,8 @@ This repository hosts a reworked version of the Chat++ plugin originally develop
 - **Colorless Copying by Default:** Text is copied without color formatting by default. Hold Shift while clicking Copy to retain colors.
 - **SAMP 0.3.7 Support:** Full support for the latest versions of SA:MP (including DL).
 
-**TODO List:**
-- **Restore Chat Positioning:** Implement functionality to allow users to move the chat window and its elements.
+**Chat Positioning:**
+When the chat input is open, drag the small square to its left. It brightens on hover and stays hidden when the input is closed. The chat text, scrollbar, input field, and line selection move together. You can move the chat partly beyond the screen edges; the square stays reachable. The position is saved in `Chat++.ini` beside the plugin and restored on the next launch.
 
 **Installation:**
 1. Download the latest release from the [releases page](https://github.com/moreveal/chatpp_rework/releases).

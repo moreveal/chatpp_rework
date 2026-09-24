@@ -21,6 +21,7 @@ public:
     ChatEntryManager();
 
     void clear();
+    void translate(int dx, int dy);
     void observe(int entryId, const CRect& rect);
 
     [[nodiscard]]

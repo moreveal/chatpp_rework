@@ -35,6 +35,8 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 using dOnPresent =              HRESULT(__stdcall*)(IDirect3DDevice9*, const RECT*, const RECT*, HWND, const RGNDATA*);
 using dOnReset =                HRESULT(__stdcall*)(IDirect3DDevice9*, D3DPRESENT_PARAMETERS*);
 using dChatRender =             void* (__fastcall*)(void*, void*);
+using dChatDraw =               void* (__fastcall*)(void*, void*);
+using dInputOpen =              void* (__fastcall*)(void*, void*);
 using dChatRenderEntry =        int(__fastcall*)(void*, void*, const char*, CRect, uint32_t);
 using dChatAddEntry =           void(__fastcall*)(void*, void*, int, const char*, const char*, DWORD, DWORD);
 using dRecalcFontSize =         int(__fastcall*)(void*, void*);
@@ -78,6 +80,8 @@ public:
     kthook::kthook_signal<dOnPresent>               mOnPresentHook{ get_function_address(17) };
     kthook::kthook_signal<dOnReset>                 mOnResetHook{ get_function_address(16) };
     kthook::kthook_simple<dChatRender>              mChatRenderHook;
+    kthook::kthook_simple<dChatDraw>                mChatDrawHook;
+    kthook::kthook_simple<dInputOpen>               mInputOpenHook;
     kthook::kthook_simple<dChatRenderEntry>         mChatRenderEntryHook;
     kthook::kthook_simple<dChatAddEntry>            mChatAddEntryHook;
     kthook::kthook_simple<dRecalcFontSize>          mChatRecalcFontSizeHook;
@@ -93,13 +97,29 @@ public:
     CChat*                              pChat = nullptr;
     ChatEntryManager                    mChatEntryManager;
     int                                 mSelectedEntry = -1;
+    void*                               mInput = nullptr;
+    HMODULE                             mModule = nullptr;
     HWND                                mGameWindow = nullptr;
+    int                                 mOffsetX = 0;
+    int                                 mOffsetY = 0;
+    bool                                mDragging = false;
+    bool                                mMouseButtonWasDown = false;
+    POINT                               mLastMouse{};
     
     // Functions
     static uintptr_t                    getSampBaseAddress();
     static bool                         isSampAvailable();
     static bool                         isGTAMenuActive();
     static HWND                         getGameHWND();
+    static RECT                         getMoveHandleRect();
+    static bool                         isInputOpen();
+    static bool                         isMoveHandleHovered();
+    static void                         updateMoveDrag();
+    static void                         setModule(HMODULE module);
+    static void                         loadPosition();
+    static void                         savePosition();
+    static void                         movePosition(int dx, int dy);
+    static void                         relocateDialog();
     static ChatEntryManager&            getChatEntryManager();
     static int                          getSampCursorMode();
     static void                         setSampCursorMode(int nMode);
@@ -129,6 +149,8 @@ public:
     static void                         OnReset(const decltype(mOnResetHook)& hook, HRESULT& return_value, IDirect3DDevice9* pDevice, D3DPRESENT_PARAMETERS* parameters);
     
     static void* __fastcall             CChat__Render(const decltype(mChatRenderHook)& hook, void* ptr, void*);
+    static void* __fastcall             CChat__Draw(const decltype(mChatDrawHook)& hook, void* ptr, void*);
+    static void* __fastcall             CInput__Open(const decltype(mInputOpenHook)& hook, void* ptr, void*);
     static int __fastcall               CChat__RenderEntry(const decltype(mChatRenderEntryHook)& hook, void* ptr, void*, const char* src, CRect rect, uint32_t color);
     static void __fastcall              CChat__AddEntry(const decltype(mChatAddEntryHook)& hook, void* ptr, void*, int nType, const char* szText, const char* szPrefix, D3DCOLOR textColor, D3DCOLOR prefixColor);
     static int __fastcall               CChat__RecalcFontSize(const decltype(mChatRecalcFontSizeHook)& hook, void* ptr, void*);

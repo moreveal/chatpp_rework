@@ -2,6 +2,7 @@
 #define GAME_STRUCTURES_H
 
 #include <cstdint>
+#include <cstddef>
 #include <d3d9.h>
 
 #pragma pack(push, 1)
@@ -60,8 +61,8 @@ struct CChat
 	long                m_nWindowBottom;
 	CChatEntry          m_entry[100];
 	CFonts*             m_pFontRenderer;
-	uint32_t            m_pTextSprit;
-	uint32_t            m_pSprite;
+	void*               m_pTextSprite;
+	void*               m_pSprite;
 	uint32_t            m_pDevice;
 	uint32_t            m_bRenderToSurface;
 	uint32_t            m_pRenderToSurface;
@@ -88,6 +89,12 @@ struct CRect
 		return x1 == other.x1 && y1 == other.y1 && x2 == other.x2 && y2 == other.y2;
 	}
 };
+#if defined(_M_IX86)
+static_assert(sizeof(CChatEntry) == 252, "SA-MP chat entry layout changed");
+static_assert(offsetof(CChat, m_pScrollbar) == 0x11E, "SA-MP chat layout changed");
+static_assert(offsetof(CChat, m_pTextSprite) == 0x63A6, "SA-MP sprite layout changed");
+static_assert(offsetof(CChat, m_pSprite) == 0x63AA, "SA-MP sprite layout changed");
+#endif
 #pragma pack(pop)
 
 #endif

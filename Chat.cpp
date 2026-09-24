@@ -125,7 +125,10 @@ void Chat::InitializeSamp()
 	const auto pageHint = SAMPGetAddress(SAMP_ADDRESS_COMMAND_SET_PAGESIZE_HINT);
 	if (!patchBytes(pageSize + 0x2F, {0x83, 0xFE, 0x14}, {0x83, 0xFE, 0x40}) ||
 		!patchBytes(pageHint + 0xD, {'2', '0'}, {'6', '4'})) return;
+	loadPosition();
 	SetHook(instance.mChatRenderHook, SAMPGetAddress(SAMP_ADDRESS_CHAT_RENDER), &CChat__Render);
+	SetHook(instance.mChatDrawHook, SAMPGetAddress(SAMP_ADDRESS_CHAT_DRAW), &CChat__Draw);
+	SetHook(instance.mInputOpenHook, SAMPGetAddress(SAMP_ADDRESS_INPUT_OPEN), &CInput__Open);
 	SetHook(instance.mChatRenderEntryHook, SAMPGetAddress(SAMP_ADDRESS_CHAT_RENDER_ENTRY), &CChat__RenderEntry);
 	SetHook(instance.mWndProcHook, SAMPGetAddress(SAMP_ADDRESS_CHATINPUT_WNDPROC), &OnWndProc);
 	SetHook(instance.mChatAddEntryHook, SAMPGetAddress(SAMP_ADDRESS_CHAT_ADD_ENTRY), &CChat__AddEntry);
@@ -153,6 +156,152 @@ bool Chat::isGTAMenuActive()
 HWND Chat::getGameHWND()
 {
 	return getInstance().mGameWindow;
+}
+
+RECT Chat::getMoveHandleRect()
+{
+	const auto& instance = getInstance();
+	if (!instance.pChat) return RECT{};
+	int left = 6 + instance.mOffsetX;
+	int top = static_cast<int>(instance.pChat->m_nWindowBottom) + instance.mOffsetY + 5;
+	RECT client{};
+	if (instance.mGameWindow && GetClientRect(instance.mGameWindow, &client))
+	{
+		left = std::clamp(left, 0, std::max(0, static_cast<int>(client.right) - 22));
+		top = std::clamp(top, 0, std::max(0, static_cast<int>(client.bottom) - 30));
+	}
+	return RECT{left, top, left + 22, top + 30};
+}
+
+bool Chat::isInputOpen()
+{
+	const auto* input = reinterpret_cast<const uint8_t*>(getInstance().mInput);
+	return input && *reinterpret_cast<const int*>(input + 0x14E0) != 0;
+}
+
+bool Chat::isMoveHandleHovered()
+{
+	const auto& instance = getInstance();
+	if (!instance.mGameWindow || !instance.pChat) return false;
+	POINT point{};
+	if (!GetCursorPos(&point) || !ScreenToClient(instance.mGameWindow, &point)) return false;
+	const RECT handle = getMoveHandleRect();
+	return PtInRect(&handle, point) != FALSE;
+}
+
+void Chat::updateMoveDrag()
+{
+	auto& instance = getInstance();
+	const bool buttonDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+	const int cursorMode = getSampCursorMode();
+	const bool active = instance.mGameWindow && GetForegroundWindow() == instance.mGameWindow &&
+		instance.pChat && isInputOpen() && cursorMode >= 2 && cursorMode <= 3 && !isGTAMenuActive();
+	POINT point{};
+	const bool hasPoint = active && GetCursorPos(&point) && ScreenToClient(instance.mGameWindow, &point);
+
+	if (instance.mDragging)
+	{
+		if (!buttonDown || !hasPoint)
+		{
+			instance.mDragging = false;
+			savePosition();
+		}
+		else
+		{
+			movePosition(point.x - instance.mLastMouse.x, point.y - instance.mLastMouse.y);
+			instance.mLastMouse = point;
+		}
+	}
+	else if (hasPoint && buttonDown && !instance.mMouseButtonWasDown &&
+		!Menu::getInstance().IsPopupActive() && !Menu::getInstance().IsEditLineActive())
+	{
+		const RECT handle = getMoveHandleRect();
+		if (PtInRect(&handle, point))
+		{
+			instance.mDragging = true;
+			instance.mLastMouse = point;
+			instance.mSelectedEntry = -1;
+		}
+	}
+	instance.mMouseButtonWasDown = buttonDown;
+}
+
+void Chat::setModule(HMODULE module)
+{
+	getInstance().mModule = module;
+}
+
+static std::string positionFilePath(HMODULE module)
+{
+	char path[MAX_PATH]{};
+	if (!module || !GetModuleFileNameA(module, path, MAX_PATH)) return {};
+	std::string result(path);
+	const auto extension = result.find_last_of('.');
+	if (extension != std::string::npos) result.resize(extension);
+	return result + ".ini";
+}
+
+void Chat::loadPosition()
+{
+	auto& instance = getInstance();
+	const auto path = positionFilePath(instance.mModule);
+	if (path.empty()) return;
+	instance.mOffsetX = GetPrivateProfileIntA("ChatPosition", "OffsetX", 0, path.c_str());
+	instance.mOffsetY = GetPrivateProfileIntA("ChatPosition", "OffsetY", 0, path.c_str());
+}
+
+void Chat::savePosition()
+{
+	const auto& instance = getInstance();
+	const auto path = positionFilePath(instance.mModule);
+	if (path.empty()) return;
+	WritePrivateProfileStringA("ChatPosition", "OffsetX", std::to_string(instance.mOffsetX).c_str(), path.c_str());
+	WritePrivateProfileStringA("ChatPosition", "OffsetY", std::to_string(instance.mOffsetY).c_str(), path.c_str());
+}
+
+void Chat::movePosition(int dx, int dy)
+{
+	auto& instance = getInstance();
+	if (!instance.pChat || !instance.mGameWindow) return;
+	RECT client{};
+	if (!GetClientRect(instance.mGameWindow, &client)) return;
+	int contentRight = 600;
+	if (instance.mInput)
+	{
+		auto* inputBytes = reinterpret_cast<uint8_t*>(instance.mInput);
+		auto* editbox = *reinterpret_cast<uint8_t**>(inputBytes + 8);
+		if (editbox)
+			contentRight = std::max(contentRight, 100 + *reinterpret_cast<int*>(editbox + 16));
+	}
+	if (instance.pChat->m_pGameUi)
+	{
+		const auto* dialog = reinterpret_cast<const uint8_t*>(instance.pChat->m_pGameUi);
+		const int dialogWidth = *reinterpret_cast<const int*>(dialog + 0x11E);
+		if (dialogWidth > 0 && dialogWidth < client.right)
+			contentRight = std::max(contentRight, dialogWidth);
+	}
+	// The content may leave the screen; keep only the drag handle reachable.
+	const int minX = -contentRight + 22;
+	const int maxX = static_cast<int>(client.right) - 22;
+	const int minY = -static_cast<int>(instance.pChat->m_nWindowBottom) - 30;
+	const int maxY = static_cast<int>(client.bottom) - 30;
+	const int nextX = std::clamp(instance.mOffsetX + dx, minX, std::max(minX, maxX));
+	const int nextY = std::clamp(instance.mOffsetY + dy, minY, std::max(minY, maxY));
+	instance.mChatEntryManager.translate(nextX - instance.mOffsetX, nextY - instance.mOffsetY);
+	instance.mOffsetX = nextX;
+	instance.mOffsetY = nextY;
+	relocateDialog();
+}
+
+void Chat::relocateDialog()
+{
+	auto& instance = getInstance();
+	if (!instance.pChat || !instance.pChat->m_pGameUi) return;
+	// The scrollbar and input box share SA-MP's game UI dialog. Move its origin
+	// so drawing and mouse hit tests use the same coordinates.
+	auto* dialog = reinterpret_cast<uint8_t*>(instance.pChat->m_pGameUi);
+	*reinterpret_cast<int*>(dialog + 0x116) = instance.mOffsetX;
+	*reinterpret_cast<int*>(dialog + 0x11A) = instance.mOffsetY;
 }
 
 ChatEntryManager& Chat::getChatEntryManager()
@@ -295,15 +444,13 @@ std::string Chat::convertFromUTF8(const std::string& utf8_str) {
 HRESULT __stdcall Chat::OnWndProc(const decltype(mWndProcHook)& hook, HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 	auto& menu = Menu::getInstance();
-
-	wchar_t wch;
-	MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, reinterpret_cast<char*>(&wParam), 1, &wch, 1);
+	auto& instance = getInstance();
 
 	// ImGui key handle
 	if (menu.imguiInited) ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam);
 
 	// Check for mouse move
-	if (msg == WM_MOUSEMOVE || msg == WM_RBUTTONDOWN) {
+	if (!instance.mDragging && (msg == WM_MOUSEMOVE || msg == WM_RBUTTONDOWN)) {
 		const auto cursorMode = getInstance().getSampCursorMode();
 		auto& mSelectedEntry = getInstance().mSelectedEntry;
 		const bool isEdit = menu.IsPopupActive() || menu.IsEditLineActive();
@@ -367,6 +514,7 @@ std::optional<HRESULT> Chat::OnPresent(const decltype(mOnPresentHook)& hook, IDi
 	ImGui_ImplDX9_NewFrame();
 	ImGui_ImplWin32_NewFrame();
 	ImGui::NewFrame();
+	updateMoveDrag();
 
 	menu.Render();
 
@@ -418,6 +566,29 @@ void* __fastcall Chat::CChat__Render(const decltype(mChatRenderHook)& hook, void
 	return hook.call_trampoline(ptr, nullptr);
 }
 
+void* __fastcall Chat::CChat__Draw(const decltype(mChatDrawHook)& hook, void* ptr, void*)
+{
+	auto& instance = getInstance();
+	auto* chat = reinterpret_cast<CChat*>(ptr);
+	instance.pChat = chat;
+	movePosition(0, 0); // Keep a saved position reachable after resolution changes.
+
+	const auto renderToSurface = chat->m_bRenderToSurface;
+	if (instance.mOffsetX || instance.mOffsetY) chat->m_bRenderToSurface = 0;
+	const auto result = hook.call_trampoline(ptr, nullptr);
+	chat->m_bRenderToSurface = renderToSurface;
+	relocateDialog(); // The shared dialog is drawn after CChat::Draw.
+	return result;
+}
+
+void* __fastcall Chat::CInput__Open(const decltype(mInputOpenHook)& hook, void* ptr, void*)
+{
+	getInstance().mInput = ptr;
+	const auto result = hook.call_trampoline(ptr, nullptr);
+	relocateDialog();
+	return result;
+}
+
 int __fastcall Chat::CChat__RenderEntry(const decltype(mChatRenderEntryHook)& hook, void* ptr, void*, const char* src, CRect rect, uint32_t color)
 {
 	auto& instance = getInstance();
@@ -432,12 +603,19 @@ int __fastcall Chat::CChat__RenderEntry(const decltype(mChatRenderEntryHook)& ho
 		if (field == offsetof(CChatEntry, m_szPrefix) || field == offsetof(CChatEntry, m_szText))
 		{
 			CRect hit{};
-			hit.x1 = std::min<size_t>(45, rect.x1);
-			hit.y1 = rect.y1;
-			hit.x2 = rect.x2;
-			hit.y2 = rect.y1 + chat->m_nCharHeight + 1;
+			hit.x1 = std::min<size_t>(45, rect.x1) + instance.mOffsetX;
+			hit.y1 = rect.y1 + instance.mOffsetY;
+			hit.x2 = rect.x2 + instance.mOffsetX;
+			hit.y2 = rect.y1 + chat->m_nCharHeight + 1 + instance.mOffsetY;
 			instance.mChatEntryManager.observe(static_cast<int>(relative / sizeof(CChatEntry)), hit);
 		}
+	}
+	if (!(chat->m_bRenderToSurface && chat->pad_[1]))
+	{
+		rect.x1 += instance.mOffsetX;
+		rect.x2 += instance.mOffsetX;
+		rect.y1 += instance.mOffsetY;
+		rect.y2 += instance.mOffsetY;
 	}
 	return hook.call_trampoline(ptr, nullptr, src, rect, color);
 }

@@ -59,3 +59,14 @@ void ChatEntryManager::clear()
 {
 	entries.clear();
 }
+
+void ChatEntryManager::translate(int dx, int dy)
+{
+	for (auto& entry : entries)
+	{
+		entry.rect.x1 += dx;
+		entry.rect.x2 += dx;
+		entry.rect.y1 += dy;
+		entry.rect.y2 += dy;
+	}
+}
