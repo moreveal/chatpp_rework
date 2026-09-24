@@ -38,16 +38,12 @@ void Menu::Render()
 	// Stop render
 	if (Chat::isGTAMenuActive()) return;
 	if (!cursorEnabled && !IsPopupActive()) return;
-
 	if (mSelectedLine > -1)
 	{
-		if (ImGui::Begin("##SelectedLine", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBackground))
+		auto* position = Chat::getInstance().getChatEntryManager().getByEntryId(mSelectedLine);
+		if (position)
 		{
-			auto* position = Chat::getInstance().getChatEntryManager().getByEntryId(mSelectedLine);
-
-			if (!position)
-				return;
-
+			ImGui::Begin("##SelectedLine", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBackground);
 			const auto& rect = position->rect;
 			const auto& charHeight = static_cast<size_t>(Chat::getInstance().pChat->m_nCharHeight);
 			
@@ -156,9 +152,9 @@ void Menu::Render()
 			}
 
 			ImGui::EndPopup();
-			ImGui::End();
 		}
 	}
+	ImGui::End();
 
 	if (IsEditLineActive() && chat.mSelectedEntry > -1)
 	{
@@ -259,8 +255,8 @@ void Menu::Render()
 			ImGui::PopItemWidth();
 			ImGui::PopStyleVar(2);
 			ImGui::PopStyleColor();
-			ImGui::End();
 		}
+		ImGui::End();
 		ImGui::PopStyleColor();
 	}
 }

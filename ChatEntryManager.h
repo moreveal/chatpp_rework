@@ -10,26 +10,22 @@ struct ChatEntryPosition
 {
     CRect rect{};
     int   entryId;     // absolute row ID
-    int   screenIndex; // screen ID
 };
 
 class ChatEntryManager
 {
 private:
-    CChat* pChat = nullptr;
     std::vector<ChatEntryPosition> entries;
 
 public:
     ChatEntryManager();
 
     void clear();
-    void push(int entryId, int screenIndex, const CRect& rect);
+    void observe(int entryId, const CRect& rect);
 
     [[nodiscard]]
     int getEntryIdByScreenCoords(int xPos, int yPos) const;
 
-    void setChatPointer(CChat* ptr);
-    CChat* getChatPointer();
     ChatEntryPosition* getByEntryId(int entryId);
 };
 

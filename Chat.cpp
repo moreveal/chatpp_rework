@@ -411,64 +411,35 @@ void DrawRect(
 
 void* __fastcall Chat::CChat__Render(const decltype(mChatRenderHook)& hook, void* ptr, void*)
 {
-	auto chat = reinterpret_cast<CChat*>(ptr);
-
-	int firstLine = std::max(1, chat->m_pScrollbar->m_nPos);
-	int charH = chat->m_nCharHeight;
-
-	auto& manager = Chat::getInstance().getChatEntryManager();
-	Chat::getInstance().pChat = chat;
-	manager.setChatPointer(chat);
-
-	int maxTextWidth = 445;
-
-	for (int screenIndex = 0; screenIndex < chat->m_nPageSize; ++screenIndex)
-	{
-		int entryId = firstLine + screenIndex;
-		auto& entry = chat->m_entry[entryId];
-
-		auto cfont = chat->m_pFontRenderer->m_pFont;
-
-		using DrawTextFn = int(__stdcall*)(
-			void*, void*, const char*, int, RECT*, unsigned int, D3DCOLOR
-		);
-
-		auto drawText = reinterpret_cast<DrawTextFn>(cfont->m_lpVtbl[14]);
-
-		RECT rc{};
-		drawText(cfont, nullptr, entry.m_szText, -1, &rc, DT_CALCRECT, 0);
-
-		int width = rc.right - rc.left;
-
-		if (chat->m_bTimestamp)
-			width += chat->m_nTimestampWidth;
-
-		maxTextWidth = std::max(maxTextWidth, width);
-	}
-
-	int y = 10;
-
-	for (int screenIndex = 0; screenIndex < chat->m_nPageSize; ++screenIndex)
-	{
-		int entryId = firstLine + screenIndex;
-
-		CRect rect{};
-		rect.x1 = 45;
-		rect.y1 = y;
-		rect.x2 = rect.x1 + maxTextWidth + 5;
-		rect.y2 = y + charH + 1;
-
-		manager.push(entryId, screenIndex, rect);
-
-		y += charH + 1;
-	}
-
+	auto* chat = reinterpret_cast<CChat*>(ptr);
+	auto& instance = getInstance();
+	instance.pChat = chat;
+	instance.mChatEntryManager.clear();
 	return hook.call_trampoline(ptr, nullptr);
 }
 
 int __fastcall Chat::CChat__RenderEntry(const decltype(mChatRenderEntryHook)& hook, void* ptr, void*, const char* src, CRect rect, uint32_t color)
 {
-    return hook.call_trampoline(ptr, nullptr, src, rect, color);
+	auto& instance = getInstance();
+	auto* chat = reinterpret_cast<CChat*>(ptr);
+	const auto source = reinterpret_cast<uintptr_t>(src);
+	const auto first = reinterpret_cast<uintptr_t>(&chat->m_entry[0]);
+	const auto last = reinterpret_cast<uintptr_t>(&chat->m_entry[100]);
+	if (source >= first && source < last)
+	{
+		const size_t relative = source - first;
+		const size_t field = relative % sizeof(CChatEntry);
+		if (field == offsetof(CChatEntry, m_szPrefix) || field == offsetof(CChatEntry, m_szText))
+		{
+			CRect hit{};
+			hit.x1 = std::min<size_t>(45, rect.x1);
+			hit.y1 = rect.y1;
+			hit.x2 = rect.x2;
+			hit.y2 = rect.y1 + chat->m_nCharHeight + 1;
+			instance.mChatEntryManager.observe(static_cast<int>(relative / sizeof(CChatEntry)), hit);
+		}
+	}
+	return hook.call_trampoline(ptr, nullptr, src, rect, color);
 }
 
 void __fastcall Chat::CChat__AddEntry(const decltype(mChatAddEntryHook)& hook, void* ptr, void*, int nType, const char* szText, const char* szPrefix, D3DCOLOR textColor, D3DCOLOR prefixColor)

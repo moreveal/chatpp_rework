@@ -2,21 +2,28 @@
 
 #include "ChatEntryManager.h"
 #include "imgui.h"
+#include <algorithm>
+
+#undef min
+#undef max
 
 ChatEntryManager::ChatEntryManager()
 {
 	entries.reserve(MAX_PAGESIZE);
 }
 
-void ChatEntryManager::push(int entryId, int screenIndex, const CRect& rect)
+void ChatEntryManager::observe(int entryId, const CRect& rect)
 {
-	if (screenIndex < 0)
+	for (auto& entry : entries)
+	{
+		if (entry.entryId != entryId) continue;
+		entry.rect.x1 = std::min(entry.rect.x1, rect.x1);
+		entry.rect.y1 = std::min(entry.rect.y1, rect.y1);
+		entry.rect.x2 = std::max(entry.rect.x2, rect.x2);
+		entry.rect.y2 = std::max(entry.rect.y2, rect.y2);
 		return;
-
-	if (entries.size() <= static_cast<size_t>(screenIndex))
-		entries.resize(screenIndex + 1);
-
-	entries[screenIndex] = { rect, entryId, screenIndex };
+	}
+	entries.push_back({rect, entryId});
 }
 
 int ChatEntryManager::getEntryIdByScreenCoords(
@@ -51,15 +58,4 @@ ChatEntryPosition* ChatEntryManager::getByEntryId(int entryId)
 void ChatEntryManager::clear()
 {
 	entries.clear();
-}
-
-void ChatEntryManager::setChatPointer(CChat* ptr)
-{
-	if (pChat != nullptr) return;
-	pChat = ptr;
-}
-
-CChat* ChatEntryManager::getChatPointer()
-{
-	return pChat;
 }
